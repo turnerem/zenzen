@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"io/fs"
 	"os"
+	"sort"
+	"time"
 )
 
 type Log struct {
@@ -67,4 +69,42 @@ func (l *Logger) Delete(filename string) error {
 		return err
 	}
 	return nil
+}
+
+// GetAllSorted returns all logs sorted by Start timestamp (newest first)
+func (l *Logger) GetAllSorted() ([]Log, error) {
+	filenames, err := l.List()
+	if err != nil {
+		return nil, err
+	}
+
+	var logs []Log
+	for _, filename := range filenames {
+		// Skip non-JSON files
+		if len(filename) < 5 || filename[len(filename)-5:] != ".json" {
+			continue
+		}
+
+		log, err := l.GetLog(filename)
+		if err != nil {
+			// Skip logs that can't be parsed
+			continue
+		}
+		logs = append(logs, log)
+	}
+
+	// Sort by Start timestamp (newest first)
+	sort.Slice(logs, func(i, j int) bool {
+		timeI, errI := time.Parse(time.RFC3339, logs[i].Start)
+		timeJ, errJ := time.Parse(time.RFC3339, logs[j].Start)
+
+		// If either can't be parsed, put them at the end
+		if errI != nil || errJ != nil {
+			return errI == nil
+		}
+
+		return timeI.After(timeJ) // Newest first
+	})
+
+	return logs, nil
 }

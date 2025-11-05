@@ -1,0 +1,114 @@
+package main
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
+
+// MinimalUI is a clean, minimal terminal UI
+type MinimalUI struct{}
+
+// NewMinimalUI creates a new minimal UI renderer
+func NewMinimalUI() *MinimalUI {
+	return &MinimalUI{}
+}
+
+// Name returns the name of this UI
+func (m *MinimalUI) Name() string {
+	return "minimal"
+}
+
+// RenderLogsList renders logs in a simple vertical list
+func (m *MinimalUI) RenderLogsList(logs []string) string {
+	if len(logs) == 0 {
+		return lipgloss.NewStyle().
+			Foreground(lipgloss.Color("8")).
+			Render("No logs yet. Start with 'gli add <title>'")
+	}
+
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("4")).
+		Bold(true)
+
+	var result []string
+	result = append(result, "\n📋 Your Logs\n")
+
+	for i, log := range logs {
+		result = append(result, fmt.Sprintf("  %d. %s", i+1, titleStyle.Render(log)))
+	}
+
+	return strings.Join(result, "\n") + "\n"
+}
+
+// RenderLog renders a single log entry
+func (m *MinimalUI) RenderLog(log Log) string {
+	labelStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("6")).
+		Bold(true)
+
+	valueStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("7"))
+
+	var parts []string
+
+	// Title
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("4")).
+		Bold(true).
+		MarginBottom(1)
+	parts = append(parts, titleStyle.Render("🎯 "+log.Title))
+
+	// Tags
+	if len(log.Tags) > 0 {
+		tagsStr := strings.Join(log.Tags, ", ")
+		parts = append(parts, labelStyle.Render("Tags:"), valueStyle.Render("  "+tagsStr))
+	}
+
+	// TTC Prediction
+	parts = append(parts, labelStyle.Render("⏱ Predicted:"), valueStyle.Render("  "+log.TTCPrediction))
+
+	// TTC Actual
+	if log.TTCActual != "" {
+		parts = append(parts, labelStyle.Render("✓ Actual:"), valueStyle.Render("  "+log.TTCActual))
+	}
+
+	// Body
+	if log.Body != "" {
+		parts = append(parts, "")
+		parts = append(parts, labelStyle.Render("📝 Notes:"))
+		parts = append(parts, valueStyle.Render(log.Body))
+	}
+
+	return "\n" + strings.Join(parts, "\n") + "\n"
+}
+
+// RenderTags renders tags with counts
+func (m *MinimalUI) RenderTags(tags map[string]int) string {
+	if len(tags) == 0 {
+		return lipgloss.NewStyle().
+			Foreground(lipgloss.Color("8")).
+			Render("No tags found")
+	}
+
+	headerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("4")).
+		Bold(true)
+
+	tagStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("6"))
+
+	countStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("2")).
+		Bold(true)
+
+	var result []string
+	result = append(result, "\n"+headerStyle.Render("🏷 Tags")+"\n")
+
+	for tag, count := range tags {
+		result = append(result, fmt.Sprintf("  %s %s", tagStyle.Render(tag), countStyle.Render(fmt.Sprintf("(%d)", count))))
+	}
+
+	return strings.Join(result, "\n") + "\n"
+}
