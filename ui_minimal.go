@@ -53,35 +53,51 @@ func (m *MinimalUI) RenderLog(log Log) string {
 
 	var parts []string
 
-	// Title
+	// Title and start time on same line
 	titleStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("4")).
-		Bold(true).
-		MarginBottom(1)
-	parts = append(parts, titleStyle.Render("🎯 "+log.Title))
+		Bold(true)
+	titleLine := log.Title
+	if log.Start != "" {
+		titleLine = log.Start + " " + log.Title
+	}
+	parts = append(parts, titleStyle.Render(titleLine))
+
+	parts = append(parts, "")
 
 	// Tags
 	if len(log.Tags) > 0 {
 		tagsStr := strings.Join(log.Tags, ", ")
-		parts = append(parts, labelStyle.Render("Tags:"), valueStyle.Render("  "+tagsStr))
+		parts = append(parts, labelStyle.Render("🏷 Tags:"), valueStyle.Render("  "+tagsStr))
+	} else {
+		parts = append(parts, labelStyle.Render("🏷 Tags:"), valueStyle.Render(""))
 	}
 
 	// TTC Prediction
-	parts = append(parts, labelStyle.Render("⏱ Predicted:"), valueStyle.Render("  "+log.TTCPrediction))
+	if log.TTCPrediction != "" {
+		parts = append(parts, labelStyle.Render("⏱ Predicted:"), valueStyle.Render("  "+log.TTCPrediction))
+	} else {
+		parts = append(parts, labelStyle.Render("⏱ Predicted:"), valueStyle.Render(""))
+	}
 
 	// TTC Actual
 	if log.TTCActual != "" {
 		parts = append(parts, labelStyle.Render("✓ Actual:"), valueStyle.Render("  "+log.TTCActual))
+	} else {
+		parts = append(parts, labelStyle.Render("✓ Actual:"), valueStyle.Render(""))
 	}
+
+	parts = append(parts, "")
 
 	// Body
+	parts = append(parts, labelStyle.Render("📝 Notes:"))
 	if log.Body != "" {
-		parts = append(parts, "")
-		parts = append(parts, labelStyle.Render("📝 Notes:"))
 		parts = append(parts, valueStyle.Render(log.Body))
+	} else {
+		parts = append(parts, valueStyle.Render(""))
 	}
 
-	return "\n" + strings.Join(parts, "\n") + "\n"
+	return strings.Join(parts, "\n")
 }
 
 // RenderTags renders tags with counts

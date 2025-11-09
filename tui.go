@@ -91,6 +91,18 @@ func (m Model) View() string {
 	return ""
 }
 
+// applyBorder applies a bright pink rounded border to content
+func (m Model) applyBorder(content []string) string {
+	innerContent := lipgloss.JoinVertical(lipgloss.Left, content...)
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#FF1493")).
+		Padding(1, 1).
+		Width(m.width - 4).
+		Height(m.height - 2).
+		Render(innerContent)
+}
+
 // renderListView renders the list of logs
 func (m Model) renderListView() string {
 	// Header
@@ -141,17 +153,7 @@ func (m Model) renderListView() string {
 	content = append(content, "")
 	content = append(content, help)
 
-	// Join content and apply border
-	innerContent := lipgloss.JoinVertical(lipgloss.Left, content...)
-	bordered := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#FF1493")). // Bright Pink
-		Padding(1, 1).
-		Width(m.width - 4).
-		Height(m.height - 2).
-		Render(innerContent)
-
-	return bordered
+	return m.applyBorder(content)
 }
 
 // renderDetailView renders the detail view of selected log
@@ -164,13 +166,13 @@ func (m Model) renderDetailView() string {
 	var content []string
 
 	// Header with back instruction
-	header := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("4")).
-		Bold(true).
-		Render("📋 Log Details")
+	// header := lipgloss.NewStyle().
+	// 	Foreground(lipgloss.Color("4")).
+	// 	Bold(true).
+	// 	Render("📋 Log Details")
 
-	content = append(content, header)
-	content = append(content, "")
+	// content = append(content, header)
+	// content = append(content, "")
 
 	// Use the renderer to display the log
 	logRendered := m.renderer.RenderLog(log)
@@ -193,17 +195,7 @@ func (m Model) renderDetailView() string {
 
 	content = append(content, footer)
 
-	// Join content and apply border
-	innerContent := lipgloss.JoinVertical(lipgloss.Left, content...)
-	bordered := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#FF1493")). // Bright Pink
-		Padding(1, 1).
-		Width(m.width - 4).
-		Height(m.height - 2).
-		Render(innerContent)
-
-	return bordered
+	return m.applyBorder(content)
 }
 
 // StartTUI starts the interactive TUI
