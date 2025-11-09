@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os/exec"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -91,6 +92,17 @@ func (m Model) View() string {
 	return ""
 }
 
+// generateFigletHeader generates a large ASCII art header using figlet
+func generateFigletHeader(text string) string {
+	cmd := exec.Command("figlet", "-f", "slant", text)
+	output, err := cmd.Output()
+	if err != nil {
+		// Fallback if figlet fails
+		return text
+	}
+	return string(output)
+}
+
 // applyBorder applies a bright pink rounded border to content
 func (m Model) applyBorder(content []string) string {
 	innerContent := lipgloss.JoinVertical(lipgloss.Left, content...)
@@ -105,11 +117,13 @@ func (m Model) applyBorder(content []string) string {
 
 // renderListView renders the list of logs
 func (m Model) renderListView() string {
-	// Header
-	header := lipgloss.NewStyle().
+	headerText := generateFigletHeader("LOGS")
+	headerText = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("4")).
-		Bold(true).
-		Render("📋 Your Logs")
+		Render(headerText)
+	// TODO: center the header horizontally?
+	// headerText = lipgloss.Place(m.width-4, lipgloss.Height(headerText), lipgloss.Center, lipgloss.Top, headerText)
+	headerLines := strings.Split(headerText, "\n")
 
 	// List items
 	var listItems []string
@@ -139,7 +153,7 @@ func (m Model) renderListView() string {
 
 	// Build content with header and items
 	var content []string
-	content = append(content, header)
+	content = append(content, headerLines...)
 	content = append(content, "")
 
 	// Limit items shown based on available height
