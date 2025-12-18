@@ -1,14 +1,18 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/turnerem/zenzen/core"
+)
 
 // UI defines the interface for different UI renderers
 type UI interface {
-	// RenderLogsList renders a list of log titles
-	RenderLogsList(logs []string) string
+	// RenderEntrysList renders a list of entry titles
+	RenderEntrysList(entrys []string) string
 
-	// RenderLog renders a single log entry
-	RenderLog(log Log) string
+	// RenderEntry renders a single entry entry
+	RenderEntry(entry core.Entry) string
 
 	// RenderTags renders tags with counts
 	RenderTags(tags map[string]int) string
@@ -32,14 +36,14 @@ func (r *UIRenderer) Switch(ui UI) {
 	r.current = ui
 }
 
-// RenderLogsList renders a list of logs
-func (r *UIRenderer) RenderLogsList(logs []string) string {
-	return r.current.RenderLogsList(logs)
+// RenderEntrysList renders a list of entrys
+func (r *UIRenderer) RenderEntrysList(entrys []string) string {
+	return r.current.RenderEntrysList(entrys)
 }
 
-// RenderLog renders a single log
-func (r *UIRenderer) RenderLog(log Log) string {
-	return r.current.RenderLog(log)
+// RenderEntry renders a single entry
+func (r *UIRenderer) RenderEntry(entry core.Entry) string {
+	return r.current.RenderEntry(entry)
 }
 
 // RenderTags renders tags

@@ -7,21 +7,22 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/turnerem/zenzen/core"
 )
 
 // Model represents the TUI state
 type Model struct {
-	logs     []Log
+	logs     []core.Entry
 	selected int    // Currently selected log index
 	view     string // "list" or "detail"
 	renderer *UIRenderer
 	width    int
 	height   int
-	err      error
+	// err      error
 }
 
 // NewModel creates a new TUI model
-func NewModel(logs []Log) *Model {
+func NewModel(logs []core.Entry) *Model {
 	return &Model{
 		logs:     logs,
 		selected: 0,
@@ -183,13 +184,13 @@ func (m Model) renderDetailView() string {
 	// header := lipgloss.NewStyle().
 	// 	Foreground(lipgloss.Color("4")).
 	// 	Bold(true).
-	// 	Render("📋 Log Details")
+	// 	Render("📋 core.Entry Details")
 
 	// content = append(content, header)
 	// content = append(content, "")
 
 	// Use the renderer to display the log
-	logRendered := m.renderer.RenderLog(log)
+	logRendered := m.renderer.RenderEntry(log)
 
 	// Limit log content height
 	availableHeight := m.height - 6
@@ -213,7 +214,7 @@ func (m Model) renderDetailView() string {
 }
 
 // StartTUI starts the interactive TUI
-func StartTUI(logs []Log) error {
+func StartTUI(logs []core.Entry) error {
 	model := NewModel(logs)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 

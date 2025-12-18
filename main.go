@@ -5,6 +5,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/turnerem/zenzen/service"
+	"github.com/turnerem/zenzen/storage"
 )
 
 func main() {
@@ -16,7 +19,7 @@ func main() {
 		return
 	}
 
-	dir := flag.String("dir", "", "Directory for logs (default: ~/.gologit/logs)")
+	dir := flag.String("dir", "", "Directory for logs (default: ~/.zenzen)")
 	flag.Parse()
 
 	// Set default directory
@@ -25,7 +28,7 @@ func main() {
 		if err != nil {
 			log.Fatal("Error: could not determine home directory:", err)
 		}
-		*dir = filepath.Join(home, ".gologit", "logs")
+		*dir = filepath.Join(home, ".zenzen")
 	}
 
 	// Create directory if it doesn't exist
@@ -33,18 +36,18 @@ func main() {
 		log.Fatal("Error: could not create logs directory:", err)
 	}
 
-	// Initialize filesystem and logger
-	fs := NewOSFileSystem(*dir)
-	logger := NewLogger(fs)
+	// Initialize filesystem and notes
+	fs := storage.NewFSFileSystem("notes", os.DirFS(*dir))
+	notes := service.NewNotes(fs)
 
 	// Get all logs sorted by timestamp
-	logs, err := logger.GetAllSorted()
+	err := notes.LoadAll()
 	if err != nil {
-		log.Fatal("Error: could not load logs:", err)
+		log.Fatal("Error: could not load notes:", err)
 	}
 
 	// Start interactive TUI
-	if err := StartTUI(logs); err != nil {
+	if err := StartTUI(notes.Entries); err != nil {
 		log.Fatal("Error starting TUI:", err)
 	}
 }

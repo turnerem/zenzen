@@ -1,6 +1,6 @@
-## Go Log
+## ZenZen
 
-Go and log your work. A personal log written in Go.
+Take notes in the terminal.
 
 A log of achievements, and an account of how little time it was thought it would take to complete them. 
 Log initial predictions of how long it will take to complete a piece of work. 
