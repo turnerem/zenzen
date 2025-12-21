@@ -1,35 +1,29 @@
 package storage
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
-	"testing/fstest"
 )
 
 var (
-	data = `{
-	"Title": "K8s",
-	"Tags": ["learning", "open-source"],
-	"Predicted Duration": "6d",
-	"Duration": "",
-	"Body": "The journey has just begun."
-}
-{
-	"Title": "System Design",
-	"Tags": ["interviews"],
-	"Predicted Duration": "7d",
-	"Duration": "8d",
-	"Body": "Books combined with youtube resources were very helpful."
-}`
+	data = `{"ID":"1","Title":"K8s","Tags":["learning","open-source"],"StartedAt":"0001-01-01T00:00:00Z","EndedAt":"0001-01-01T00:00:00Z","EstimatedDuration":0,"Body":"The journey has just begun."}
+{"ID":"2","Title":"System Design","Tags":["interviews"],"StartedAt":"0001-01-01T00:00:00Z","EndedAt":"0001-01-01T00:00:00Z","EstimatedDuration":0,"Body":"Books combined with youtube resources were very helpful."}`
 )
 
-func TestOSFileSystem(t *testing.T) {
+func TestFSFileSystem(t *testing.T) {
 	t.Run("GetAll logs from filesystem", func(t *testing.T) {
-		fs := fstest.MapFS{
-			"notes.json": {Data: []byte(data)},
+		// Create temp directory (auto-cleanup)
+		tmpDir := t.TempDir()
+		notesFile := filepath.Join(tmpDir, "notes.json")
+
+		// Write test data
+		if err := os.WriteFile(notesFile, []byte(data), 0644); err != nil {
+			t.Fatalf("Failed to write test data: %v", err)
 		}
 
 		// Setup
-		storage := NewFSFileSystem(fs)
+		storage := NewFSFileSystem(tmpDir)
 
 		// Execute
 		logs, err := storage.GetAll()
@@ -37,6 +31,10 @@ func TestOSFileSystem(t *testing.T) {
 		// Verify
 		if err != nil {
 			t.Fatalf("Expected no error, got %v", err)
+		}
+
+		if len(logs) != 2 {
+			t.Fatalf("Expected 2 logs, got %d", len(logs))
 		}
 
 		for _, l := range logs {

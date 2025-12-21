@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"io/fs"
+	"os"
+	"path/filepath"
 
 	"github.com/turnerem/zenzen/core"
 )
@@ -16,24 +17,18 @@ import (
 const FILENAME = "notes.json"
 
 type FSFileSystem struct {
-	fileSystem fs.FS
+	baseDir string
 }
 
-func NewFSFileSystem(fileSystem fs.FS) *FSFileSystem {
-	return &FSFileSystem{fileSystem: fileSystem}
+func NewFSFileSystem(baseDir string) *FSFileSystem {
+	return &FSFileSystem{
+		baseDir: baseDir,
+	}
 }
 
 func (o *FSFileSystem) GetAll() (map[string]core.Entry, error) {
-	logs, err := getLogs(o.fileSystem, FILENAME)
-	if err != nil {
-		return nil, err
-	}
-
-	return logs, nil
-}
-
-func getLogs(fileSystem fs.FS, filename string) (map[string]core.Entry, error) {
-	logFile, err := fs.ReadFile(fileSystem, filename)
+	filePath := filepath.Join(o.baseDir, FILENAME)
+	logFile, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -56,10 +51,24 @@ func getLogs(fileSystem fs.FS, filename string) (map[string]core.Entry, error) {
 	return entries, nil
 }
 
-// func (o *OSFileSystem) Save(writer io.Writer, name string, data []byte, perm fs.FileMode) error {
-// 	return writer.Write(o.dir+"/"+name, data, perm)
-// }
+// Save writes all entries back to the notes file in NDJSON format
+func (o *FSFileSystem) Save(entries map[string]core.Entry) error {
+	filePath := filepath.Join(o.baseDir, FILENAME)
 
-// func (o *OSFileSystem) Remove(name string) error {
-// 	return os.Remove(o.dir + "/" + name)
-// }
+	f, err := os.Create(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	encoder := json.NewEncoder(f)
+
+	// Write entries (order not guaranteed, map iteration order)
+	for _, entry := range entries {
+		if err := encoder.Encode(entry); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}

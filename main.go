@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/turnerem/zenzen/core"
 	"github.com/turnerem/zenzen/service"
 	"github.com/turnerem/zenzen/storage"
 )
@@ -36,7 +37,7 @@ func main() {
 	}
 
 	// Initialize filesystem and notes
-	fs := storage.NewFSFileSystem(os.DirFS(*dir))
+	fs := storage.NewFSFileSystem(*dir)
 	notes := service.NewNotes(fs)
 
 	// Get all logs sorted by timestamp
@@ -45,8 +46,20 @@ func main() {
 		log.Fatal("Error: could not load notes:", err)
 	}
 
+	// Create save callback that doesn't expose the service layer
+	saveFn := func(entries map[string]core.Entry) error {
+		notes.Entries = entries
+		return notes.Save()
+	}
+
+	// Build ordered IDs for TUI navigation (frontend concern)
+	orderedIDs := make([]string, 0, len(notes.Entries))
+	for id := range notes.Entries {
+		orderedIDs = append(orderedIDs, id)
+	}
+
 	// Start interactive TUI
-	if err := StartTUI(notes.Entries); err != nil {
+	if err := StartTUI(notes.Entries, orderedIDs, saveFn); err != nil {
 		log.Fatal("Error starting TUI:", err)
 	}
 }

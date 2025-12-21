@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os/exec"
 	"strings"
 
@@ -11,36 +12,33 @@ import (
 	"github.com/turnerem/zenzen/core"
 )
 
+// SaveFunc is a function that saves entries to storage
+type SaveFunc func(entries map[string]core.Entry) error
+
 // Model represents the TUI state
 type Model struct {
-	logs          map[string]core.Entry
-	orderedIDs    []string // Ordered list of IDs for navigation
-	selectedIndex int      // Index in orderedIDs
-	view          string   // "list", "detail", or "edit"
+	entries       map[string]core.Entry
+	orderedIDs    []string
+	saveFn        SaveFunc
+	selectedIndex int // Index in OrderedIDs
+	view          string // "list", "detail", or "edit"
 	textarea      textarea.Model
 	renderer      *UIRenderer
 	width         int
 	height        int
-	// err      error
 }
 
 // NewModel creates a new TUI model
-func NewModel(logs map[string]core.Entry) *Model {
-	// Extract and sort IDs for consistent ordering
-	orderedIDs := make([]string, 0, len(logs))
-	for id := range logs {
-		orderedIDs = append(orderedIDs, id)
-	}
-	// You could sort here if desired: sort.Strings(orderedIDs)
-
+func NewModel(entries map[string]core.Entry, orderedIDs []string, saveFn SaveFunc) *Model {
 	// Initialize textarea
 	ta := textarea.New()
 	ta.Placeholder = "Enter log body..."
 	ta.Focus()
 
 	return &Model{
-		logs:          logs,
+		entries:       entries,
 		orderedIDs:    orderedIDs,
+		saveFn:        saveFn,
 		selectedIndex: 0,
 		view:          "list",
 		textarea:      ta,
@@ -66,9 +64,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Handle our escape/save logic first
 			if msg.String() == "esc" {
 				selectedID := m.orderedIDs[m.selectedIndex]
-				entry := m.logs[selectedID]
+				entry := m.entries[selectedID]
 				entry.Body = m.textarea.Value()
-				m.logs[selectedID] = entry
+				m.entries[selectedID] = entry
+				// Save to disk
+				if err := m.saveFn(m.entries); err != nil {
+					log.Printf("Error saving notes: %v", err)
+				}
 				m.view = "list"
 				return m, nil
 			}
@@ -104,24 +106,27 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.selectedIndex++
 		}
 	case "enter", " ":
-		if m.view == "list" && len(m.logs) > 0 {
+		if m.view == "list" && len(m.entries) > 0 {
 			// Load current entry body into textarea
 			selectedID := m.orderedIDs[m.selectedIndex]
-			entry := m.logs[selectedID]
+			entry := m.entries[selectedID]
 			m.textarea.SetValue(entry.Body)
 			m.view = "edit"
 		}
 	case "d": // delete log
-		selectedID := m.orderedIDs[m.selectedIndex]
-		delete(m.logs, selectedID)
-		// Remove from orderedIDs
-		m.orderedIDs = append(m.orderedIDs[:m.selectedIndex], m.orderedIDs[m.selectedIndex+1:]...)
-		// Adjust selectedIndex if needed
-		if m.selectedIndex >= len(m.orderedIDs) && m.selectedIndex > 0 {
-			m.selectedIndex--
-		}
-		if m.view == "detail" && len(m.orderedIDs) > 0 {
-			m.view = "list"
+		if m.view == "list" && len(m.orderedIDs) > 0 {
+			selectedID := m.orderedIDs[m.selectedIndex]
+			delete(m.entries, selectedID)
+			// Remove from orderedIDs
+			m.orderedIDs = append(m.orderedIDs[:m.selectedIndex], m.orderedIDs[m.selectedIndex+1:]...)
+			// Save to disk
+			if err := m.saveFn(m.entries); err != nil {
+				log.Printf("Error saving notes: %v", err)
+			}
+			// Adjust selectedIndex if needed
+			if m.selectedIndex >= len(m.orderedIDs) && m.selectedIndex > 0 {
+				m.selectedIndex--
+			}
 		}
 	case "esc", "l":
 		if m.view == "detail" {
@@ -135,7 +140,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // View renders the UI
 func (m Model) View() string {
-	if len(m.logs) == 0 {
+	if len(m.entries) == 0 {
 		return "No logs found. Run 'go run . setup' to create test data.\n\nPress 'q' to quit.\n"
 	}
 
@@ -186,7 +191,7 @@ func (m Model) renderListView() string {
 	// List items
 	var listItems []string
 	for i, id := range m.orderedIDs {
-		log := m.logs[id]
+		log := m.entries[id]
 		selected := i == m.selectedIndex
 
 		var line string
@@ -236,7 +241,7 @@ func (m Model) renderDetailView() string {
 	}
 
 	selectedID := m.orderedIDs[m.selectedIndex]
-	log := m.logs[selectedID]
+	log := m.entries[selectedID]
 	var content []string
 
 	// Header with back instruction
@@ -279,7 +284,7 @@ func (m Model) renderEditView() string {
 	}
 
 	selectedID := m.orderedIDs[m.selectedIndex]
-	log := m.logs[selectedID]
+	log := m.entries[selectedID]
 	var content []string
 
 	// Display metadata (read-only)
@@ -321,8 +326,8 @@ func (m Model) renderEditView() string {
 }
 
 // StartTUI starts the interactive TUI
-func StartTUI(entries map[string]core.Entry) error {
-	model := NewModel(entries)
+func StartTUI(entries map[string]core.Entry, orderedIDs []string, saveFn SaveFunc) error {
+	model := NewModel(entries, orderedIDs, saveFn)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	_, err := p.Run()

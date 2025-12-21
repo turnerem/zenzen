@@ -6,6 +6,7 @@ import (
 
 type Store interface {
 	GetAll() (map[string]core.Entry, error)
+	Save(entries map[string]core.Entry) error
 	// ReadDir(name string) ([]fs.DirEntry, error)
 	// WriteFile(name string, data []byte, perm os.FileMode) error
 	// Remove(name string) error
@@ -41,8 +42,17 @@ func (l *Notes) LoadAll() error {
 
 func (l *Notes) Delete(ID string) {
 	delete(l.Entries, ID)
+}
 
-	// TODO: also delete from storage async
+// Save persists all entries to storage
+// TODO: Option 2 - Implement periodic background save with dirty flag
+// This would involve:
+// - A background goroutine with a ticker (e.g., every 1-2 seconds)
+// - A "dirty" flag set whenever Entries changes
+// - Saving only when dirty flag is true, then clearing it
+// - Proper shutdown/cleanup to ensure final save
+func (l *Notes) Save() error {
+	return l.store.Save(l.Entries)
 }
 
 // returns logs for page size, filtered and sorted

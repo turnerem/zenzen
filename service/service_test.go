@@ -55,6 +55,11 @@ func (m *MockStore) GetAll() (map[string]core.Entry, error) {
 	}, nil
 }
 
+func (m *MockStore) Save(entries map[string]core.Entry) error {
+	// Mock save - does nothing
+	return nil
+}
+
 func TestLoadAll(t *testing.T) {
 	t.Run("get list", func(t *testing.T) {
 		notes := NewNotes(&MockStore{})
