@@ -16,7 +16,6 @@ func main() {
 		if err := createTestData(); err != nil {
 			log.Fatal("Error creating test data:", err)
 		}
-		return
 	}
 
 	dir := flag.String("dir", "", "Directory for logs (default: ~/.zenzen)")
@@ -37,7 +36,7 @@ func main() {
 	}
 
 	// Initialize filesystem and notes
-	fs := storage.NewFSFileSystem( os.DirFS(*dir))
+	fs := storage.NewFSFileSystem(os.DirFS(*dir))
 	notes := service.NewNotes(fs)
 
 	// Get all logs sorted by timestamp

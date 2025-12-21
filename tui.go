@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/turnerem/zenzen/core"
@@ -15,7 +16,8 @@ type Model struct {
 	logs          map[string]core.Entry
 	orderedIDs    []string // Ordered list of IDs for navigation
 	selectedIndex int      // Index in orderedIDs
-	view          string   // "list" or "detail"
+	view          string   // "list", "detail", or "edit"
+	textarea      textarea.Model
 	renderer      *UIRenderer
 	width         int
 	height        int
@@ -31,11 +33,17 @@ func NewModel(logs map[string]core.Entry) *Model {
 	}
 	// You could sort here if desired: sort.Strings(orderedIDs)
 
+	// Initialize textarea
+	ta := textarea.New()
+	ta.Placeholder = "Enter log body..."
+	ta.Focus()
+
 	return &Model{
 		logs:          logs,
 		orderedIDs:    orderedIDs,
 		selectedIndex: 0,
 		view:          "list",
+		textarea:      ta,
 		renderer:      NewUIRenderer(NewMinimalUI()),
 		width:         80,
 		height:        24,
@@ -49,6 +57,28 @@ func (m Model) Init() tea.Cmd {
 
 // Update handles messages
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	// When in edit mode, let textarea handle its updates
+	if m.view == "edit" {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			// Handle our escape/save logic first
+			if msg.String() == "esc" {
+				selectedID := m.orderedIDs[m.selectedIndex]
+				entry := m.logs[selectedID]
+				entry.Body = m.textarea.Value()
+				m.logs[selectedID] = entry
+				m.view = "list"
+				return m, nil
+			}
+			// Otherwise let textarea handle the key
+		}
+		m.textarea, cmd = m.textarea.Update(msg)
+		return m, cmd
+	}
+
+	// Handle other messages
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -75,7 +105,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "enter", " ":
 		if m.view == "list" && len(m.logs) > 0 {
-			m.view = "detail"
+			// Load current entry body into textarea
+			selectedID := m.orderedIDs[m.selectedIndex]
+			entry := m.logs[selectedID]
+			m.textarea.SetValue(entry.Body)
+			m.view = "edit"
 		}
 	case "d": // delete log
 		selectedID := m.orderedIDs[m.selectedIndex]
@@ -110,6 +144,8 @@ func (m Model) View() string {
 		return m.renderListView()
 	case "detail":
 		return m.renderDetailView()
+	case "edit":
+		return m.renderEditView()
 	}
 	return ""
 }
@@ -172,7 +208,7 @@ func (m Model) renderListView() string {
 	// Footer help
 	help := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("8")).
-		Render("↑/↓ (j/k) navigate | enter select | n new | q quit")
+		Render("↑/↓ (j/k) navigate | enter edit | d delete | n new | q quit")
 
 	// Build content with header and items
 	var content []string
@@ -229,7 +265,55 @@ func (m Model) renderDetailView() string {
 	// Footer
 	footer := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("8")).
-		Render("esc go back | q quit")
+		Render("e edit | esc go back | q quit")
+
+	content = append(content, footer)
+
+	return m.applyBorder(content)
+}
+
+// renderEditView renders the edit view with metadata and textarea
+func (m Model) renderEditView() string {
+	if len(m.orderedIDs) == 0 || m.selectedIndex >= len(m.orderedIDs) {
+		return "Error: No log selected\n"
+	}
+
+	selectedID := m.orderedIDs[m.selectedIndex]
+	log := m.logs[selectedID]
+	var content []string
+
+	// Display metadata (read-only)
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("4")).
+		Bold(true)
+
+	labelStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("8"))
+
+	content = append(content, titleStyle.Render("Editing: "+log.Title))
+	content = append(content, "")
+
+	// Tags
+	if len(log.Tags) > 0 {
+		content = append(content, labelStyle.Render("Tags: ")+strings.Join(log.Tags, ", "))
+	}
+
+	// Duration info
+	if log.EstimatedDuration > 0 {
+		content = append(content, labelStyle.Render(fmt.Sprintf("Estimated: %v", log.EstimatedDuration)))
+	}
+
+	content = append(content, "")
+	content = append(content, labelStyle.Render("Body:"))
+
+	// Textarea for editing body
+	content = append(content, m.textarea.View())
+	content = append(content, "")
+
+	// Footer
+	footer := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("8")).
+		Render("esc save & exit | ctrl+c quit without saving")
 
 	content = append(content, footer)
 
