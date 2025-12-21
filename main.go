@@ -52,14 +52,8 @@ func main() {
 		return notes.Save()
 	}
 
-	// Build ordered IDs for TUI navigation (frontend concern)
-	orderedIDs := make([]string, 0, len(notes.Entries))
-	for id := range notes.Entries {
-		orderedIDs = append(orderedIDs, id)
-	}
-
 	// Start interactive TUI
-	if err := StartTUI(notes.Entries, orderedIDs, saveFn); err != nil {
+	if err := StartTUI(notes.Entries, saveFn); err != nil {
 		log.Fatal("Error starting TUI:", err)
 	}
 }

@@ -29,11 +29,18 @@ type Model struct {
 }
 
 // NewModel creates a new TUI model
-func NewModel(entries map[string]core.Entry, orderedIDs []string, saveFn SaveFunc) *Model {
+func NewModel(entries map[string]core.Entry, saveFn SaveFunc) *Model {
 	// Initialize textarea
 	ta := textarea.New()
 	ta.Placeholder = "Enter log body..."
 	ta.Focus()
+
+	// Build initial ordering from entries
+	// TODO: Add sorting options (by timestamp, title, etc.)
+	orderedIDs := make([]string, 0, len(entries))
+	for id := range entries {
+		orderedIDs = append(orderedIDs, id)
+	}
 
 	return &Model{
 		entries:       entries,
@@ -326,8 +333,8 @@ func (m Model) renderEditView() string {
 }
 
 // StartTUI starts the interactive TUI
-func StartTUI(entries map[string]core.Entry, orderedIDs []string, saveFn SaveFunc) error {
-	model := NewModel(entries, orderedIDs, saveFn)
+func StartTUI(entries map[string]core.Entry, saveFn SaveFunc) error {
+	model := NewModel(entries, saveFn)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	_, err := p.Run()
