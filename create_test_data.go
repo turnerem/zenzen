@@ -38,7 +38,7 @@ func createTestData() error {
 		return err
 	}
 
-	logsDir := filepath.Join(home, ".zenzen", "notes")
+	logsDir := filepath.Join(home, ".zenzen")
 
 	// Create directory
 	if err := os.MkdirAll(logsDir, 0755); err != nil {

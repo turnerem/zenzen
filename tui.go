@@ -77,6 +77,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.view == "list" && len(m.logs) > 0 {
 			m.view = "detail"
 		}
+	case "d": // delete log
+		selectedID := m.orderedIDs[m.selectedIndex]
+		delete(m.logs, selectedID)
+		// Remove from orderedIDs
+		m.orderedIDs = append(m.orderedIDs[:m.selectedIndex], m.orderedIDs[m.selectedIndex+1:]...)
+		// Adjust selectedIndex if needed
+		if m.selectedIndex >= len(m.orderedIDs) && m.selectedIndex > 0 {
+			m.selectedIndex--
+		}
+		if m.view == "detail" && len(m.orderedIDs) > 0 {
+			m.view = "list"
+		}
 	case "esc", "l":
 		if m.view == "detail" {
 			m.view = "list"
