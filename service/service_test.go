@@ -30,6 +30,7 @@ type MockStore struct {
 
 var (
 	k8sLog = core.Entry{
+		ID:                "1",
 		Title:             "K8s",
 		Tags:              []string{"learning", "open-source"},
 		EstimatedDuration: time.Hour * 3,
@@ -37,6 +38,7 @@ var (
 		Body:              "The journey has just begun.",
 	}
 	systemDesignLog = core.Entry{
+		ID:                "2",
 		Title:             "System Design",
 		Tags:              []string{"interviews"},
 		EstimatedDuration: time.Hour * 4,
@@ -46,23 +48,55 @@ var (
 	}
 )
 
-func (m *MockStore) GetAll() ([]core.Entry, error) {
-	return []core.Entry{
-		k8sLog,
-		systemDesignLog,
+func (m *MockStore) GetAll() (map[string]core.Entry, error) {
+	return map[string]core.Entry{
+		"1": k8sLog,
+		"2": systemDesignLog,
 	}, nil
 }
 
-func TestLoadLogs(t *testing.T) {
+func TestLoadAll(t *testing.T) {
 	t.Run("get list", func(t *testing.T) {
 		notes := NewNotes(&MockStore{})
 		err := notes.LoadAll()
 
 		assertNilError(t, err)
 
-		want := []core.Entry{
-			k8sLog,
-			systemDesignLog,
+		want := map[string]core.Entry{
+			"1": k8sLog,
+			"2": systemDesignLog,
+		}
+
+		assertEquality(t, notes.Entries, want)
+	})
+}
+
+func TestDelete(t *testing.T) {
+	t.Run("delete existing log", func(t *testing.T) {
+		notes := NewNotes(&MockStore{})
+		err := notes.LoadAll()
+		assertNilError(t, err)
+
+		notes.Delete("1")
+
+		want := map[string]core.Entry{
+			"2": systemDesignLog,
+		}
+
+		assertEquality(t, notes.Entries, want)
+
+	})
+
+	t.Run("delete non-existing log", func(t *testing.T) {
+		notes := NewNotes(&MockStore{})
+		err := notes.LoadAll()
+		assertNilError(t, err)
+
+		notes.Delete("non-existing-id")
+
+		want := map[string]core.Entry{
+			"1": k8sLog,
+			"2": systemDesignLog,
 		}
 
 		assertEquality(t, notes.Entries, want)

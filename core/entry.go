@@ -11,7 +11,7 @@ const (
 
 // Split out metadata from note body?
 type Entry struct {
-	ID                int           `json:"ID"`
+	ID                string        `json:"ID"`
 	Title             string        `json:"Title"`
 	Tags              []string      `json:"Tags"`
 	StartedAt         time.Time     `json:"StartAt"`

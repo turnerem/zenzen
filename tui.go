@@ -12,24 +12,33 @@ import (
 
 // Model represents the TUI state
 type Model struct {
-	logs     []core.Entry
-	selected int    // Currently selected log index
-	view     string // "list" or "detail"
-	renderer *UIRenderer
-	width    int
-	height   int
+	logs          map[string]core.Entry
+	orderedIDs    []string // Ordered list of IDs for navigation
+	selectedIndex int      // Index in orderedIDs
+	view          string   // "list" or "detail"
+	renderer      *UIRenderer
+	width         int
+	height        int
 	// err      error
 }
 
 // NewModel creates a new TUI model
-func NewModel(logs []core.Entry) *Model {
+func NewModel(logs map[string]core.Entry) *Model {
+	// Extract and sort IDs for consistent ordering
+	orderedIDs := make([]string, 0, len(logs))
+	for id := range logs {
+		orderedIDs = append(orderedIDs, id)
+	}
+	// You could sort here if desired: sort.Strings(orderedIDs)
+
 	return &Model{
-		logs:     logs,
-		selected: 0,
-		view:     "list",
-		renderer: NewUIRenderer(NewMinimalUI()),
-		width:    80,
-		height:   24,
+		logs:          logs,
+		orderedIDs:    orderedIDs,
+		selectedIndex: 0,
+		view:          "list",
+		renderer:      NewUIRenderer(NewMinimalUI()),
+		width:         80,
+		height:        24,
 	}
 }
 
@@ -57,12 +66,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "q", "ctrl+c":
 		return m, tea.Quit
 	case "up", "k":
-		if m.view == "list" && m.selected > 0 {
-			m.selected--
+		if m.view == "list" && m.selectedIndex > 0 {
+			m.selectedIndex--
 		}
 	case "down", "j":
-		if m.view == "list" && m.selected < len(m.logs)-1 {
-			m.selected++
+		if m.view == "list" && m.selectedIndex < len(m.orderedIDs)-1 {
+			m.selectedIndex++
 		}
 	case "enter", " ":
 		if m.view == "list" && len(m.logs) > 0 {
@@ -128,8 +137,9 @@ func (m Model) renderListView() string {
 
 	// List items
 	var listItems []string
-	for i, log := range m.logs {
-		selected := i == m.selected
+	for i, id := range m.orderedIDs {
+		log := m.logs[id]
+		selected := i == m.selectedIndex
 
 		var line string
 		if selected {
@@ -173,11 +183,12 @@ func (m Model) renderListView() string {
 
 // renderDetailView renders the detail view of selected log
 func (m Model) renderDetailView() string {
-	if len(m.logs) == 0 || m.selected >= len(m.logs) {
+	if len(m.orderedIDs) == 0 || m.selectedIndex >= len(m.orderedIDs) {
 		return "Error: No log selected\n"
 	}
 
-	log := m.logs[m.selected]
+	selectedID := m.orderedIDs[m.selectedIndex]
+	log := m.logs[selectedID]
 	var content []string
 
 	// Header with back instruction
@@ -214,8 +225,8 @@ func (m Model) renderDetailView() string {
 }
 
 // StartTUI starts the interactive TUI
-func StartTUI(logs []core.Entry) error {
-	model := NewModel(logs)
+func StartTUI(entries map[string]core.Entry) error {
+	model := NewModel(entries)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	_, err := p.Run()

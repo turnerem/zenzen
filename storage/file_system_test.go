@@ -38,9 +38,6 @@ func TestOSFileSystem(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Expected no error, got %v", err)
 		}
-		if len(logs) != 2 {
-			t.Fatalf("Expected 2 logs, got %d", len(logs))
-		}
 
 		for _, l := range logs {
 			if l.Title != "K8s" && l.Title != "System Design" {

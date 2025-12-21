@@ -7,7 +7,7 @@ import (
 
 var (
 	K8s = Entry{
-		ID:                1,
+		ID:                "1",
 		Title:             "K8s",
 		Tags:              []string{"learning", "open-source"},
 		StartedAt:         time.Date(2025, 12, 20, 9, 0, 0, 0, time.UTC),
@@ -16,7 +16,7 @@ var (
 		Body:              "The journey has just begun.",
 	}
 	SystemDesign = Entry{
-		ID:                2,
+		ID:                "2",
 		Title:             "System Design",
 		Tags:              []string{"interviews"},
 		StartedAt:         time.Date(2025, 05, 20, 10, 0, 0, 0, time.UTC),

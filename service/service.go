@@ -5,7 +5,7 @@ import (
 )
 
 type Store interface {
-	GetAll() ([]core.Entry, error)
+	GetAll() (map[string]core.Entry, error)
 	// ReadDir(name string) ([]fs.DirEntry, error)
 	// WriteFile(name string, data []byte, perm os.FileMode) error
 	// Remove(name string) error
@@ -14,7 +14,7 @@ type Store interface {
 
 type Notes struct {
 	store   Store
-	Entries []core.Entry
+	Entries map[string]core.Entry
 }
 
 type Opts struct {
@@ -39,13 +39,11 @@ func (l *Notes) LoadAll() error {
 	return nil
 }
 
-// func (l *Notes) Delete(filename string) error {
-// 	err := l.store.Remove(filename)
-// 	if err != nil && !os.IsNotExist(err) {
-// 		return err
-// 	}
-// 	return nil
-// }
+func (l *Notes) Delete(ID string) {
+	delete(l.Entries, ID)
+
+	// TODO: also delete from storage async
+}
 
 // returns logs for page size, filtered and sorted
 // func (l *Notes) ListLogsSorted(opts Opts) ([]core.Entry, error) {

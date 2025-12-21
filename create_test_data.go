@@ -46,7 +46,7 @@ func createTestData() error {
 	}
 
 	testLogs := []struct {
-		id                int
+		id                string
 		title             string
 		tags              []string
 		startedAt         time.Time
@@ -55,7 +55,7 @@ func createTestData() error {
 		body              string
 	}{
 		{
-			id:                1,
+			id:                "1",
 			title:             "K8s Migration",
 			tags:              []string{"DevOps", "Learning", "Infrastructure"},
 			estimatedDuration: 5 * core.DAY,
@@ -64,7 +64,7 @@ func createTestData() error {
 			endedAt:           time.Now().AddDate(0, 0, -15).Add(6 * core.DAY),
 		},
 		{
-			id:                2,
+			id:                "2",
 			title:             "System Design Interview",
 			tags:              []string{"Interviews", "Learning"},
 			estimatedDuration: 7 * core.DAY,
@@ -73,7 +73,7 @@ func createTestData() error {
 			endedAt:           time.Now().AddDate(0, 0, -10).Add(8 * core.DAY),
 		},
 		{
-			id:                3,
+			id:                "3",
 			title:             "Bug Fix: Memory Leak",
 			tags:              []string{"Bug Fix", "Performance"},
 			estimatedDuration: 4 * time.Hour,
@@ -82,7 +82,7 @@ func createTestData() error {
 			endedAt:           time.Now().AddDate(0, 0, -5).Add(2 * time.Hour),
 		},
 		{
-			id:                4,
+			id:                "4",
 			title:             "Refactor Database Layer",
 			tags:              []string{"Refactoring", "Database"},
 			estimatedDuration: 3 * core.DAY,
@@ -91,7 +91,7 @@ func createTestData() error {
 			endedAt:           time.Now().AddDate(0, 0, -3).Add(4 * core.DAY),
 		},
 		{
-			id:                5,
+			id:                "5",
 			title:             "Write API Documentation",
 			tags:              []string{"Documentation", "API"},
 			estimatedDuration: 2 * core.DAY,
@@ -100,7 +100,7 @@ func createTestData() error {
 			// endedAt is zero value - still in progress
 		},
 		{
-			id:                6,
+			id:                "6",
 			title:             "Code Review Session",
 			tags:              []string{"Code Review", "Team"},
 			estimatedDuration: 1 * core.DAY,
@@ -109,6 +109,16 @@ func createTestData() error {
 			endedAt:           time.Now().Add(1 * core.DAY),
 		},
 	}
+
+	// Create single notes.json file
+	notesFile := filepath.Join(logsDir, "notes.json")
+	f, err := os.Create(notesFile)
+	if err != nil {
+		return fmt.Errorf("error creating notes file: %w", err)
+	}
+	defer f.Close()
+
+	encoder := json.NewEncoder(f)
 
 	for _, log := range testLogs {
 		logData := core.Entry{
@@ -121,24 +131,14 @@ func createTestData() error {
 			Body:              log.body,
 		}
 
-		// Create filename from title
-		filename := log.title + ".json"
-		filePath := filepath.Join(logsDir, filename)
-
-		// Marshal to JSON
-		data, err := json.MarshalIndent(logData, "", "  ")
-		if err != nil {
-			return fmt.Errorf("error marshaling log %s: %w", log.title, err)
+		// Encode to file (each entry on its own line)
+		if err := encoder.Encode(logData); err != nil {
+			return fmt.Errorf("error encoding log %s: %w", log.title, err)
 		}
 
-		// Write to file
-		if err := os.WriteFile(filePath, data, 0644); err != nil {
-			return fmt.Errorf("error writing log file %s: %w", filePath, err)
-		}
-
-		fmt.Printf("✓ Created %s\n", filename)
+		fmt.Printf("✓ Added %s\n", log.title)
 	}
 
-	fmt.Printf("\nTest data created in %s\n", logsDir)
+	fmt.Printf("\nTest data created in %s\n", notesFile)
 	return nil
 }

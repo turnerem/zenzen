@@ -23,7 +23,7 @@ func NewFSFileSystem(fileSystem fs.FS) *FSFileSystem {
 	return &FSFileSystem{fileSystem: fileSystem}
 }
 
-func (o *FSFileSystem) GetAll() ([]core.Entry, error) {
+func (o *FSFileSystem) GetAll() (map[string]core.Entry, error) {
 	logs, err := getLogs(o.fileSystem, FILENAME)
 	if err != nil {
 		return nil, err
@@ -32,13 +32,13 @@ func (o *FSFileSystem) GetAll() ([]core.Entry, error) {
 	return logs, nil
 }
 
-func getLogs(fileSystem fs.FS, filename string) ([]core.Entry, error) {
+func getLogs(fileSystem fs.FS, filename string) (map[string]core.Entry, error) {
 	logFile, err := fs.ReadFile(fileSystem, filename)
 	if err != nil {
 		return nil, err
 	}
 
-	var logs []core.Entry
+	entries := make(map[string]core.Entry)
 	decoder := json.NewDecoder(bytes.NewReader(logFile))
 
 	for {
@@ -50,10 +50,10 @@ func getLogs(fileSystem fs.FS, filename string) ([]core.Entry, error) {
 		if err != nil {
 			return nil, err
 		}
-		logs = append(logs, entry)
+		entries[entry.ID] = entry
 	}
 
-	return logs, nil
+	return entries, nil
 }
 
 // func (o *OSFileSystem) Save(writer io.Writer, name string, data []byte, perm fs.FileMode) error {
