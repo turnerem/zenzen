@@ -1,7 +1,9 @@
 package storage
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"io/fs"
 
 	"github.com/turnerem/zenzen/core"
@@ -11,49 +13,47 @@ import (
 // add log
 // delete log
 
-const DIR = "notes"
+const FILENAME = "notes.json"
 
 type FSFileSystem struct {
-	dir        string
 	fileSystem fs.FS
 }
 
-func NewFSFileSystem(dir string, fileSystem fs.FS) *FSFileSystem {
-	return &FSFileSystem{dir: dir, fileSystem: fileSystem}
+func NewFSFileSystem(fileSystem fs.FS) *FSFileSystem {
+	return &FSFileSystem{fileSystem: fileSystem}
 }
 
 func (o *FSFileSystem) GetAll() ([]core.Entry, error) {
-	dir, err := fs.ReadDir(o.fileSystem, o.dir)
-
+	logs, err := getLogs(o.fileSystem, FILENAME)
 	if err != nil {
 		return nil, err
-	}
-
-	var logs []core.Entry
-	for _, file := range dir {
-		log, err := getLog(o.fileSystem, o.dir+"/"+file.Name())
-		if err != nil {
-			return nil, err
-		}
-		logs = append(logs, log)
 	}
 
 	return logs, nil
 }
 
-func getLog(fileSystem fs.FS, filename string) (core.Entry, error) {
+func getLogs(fileSystem fs.FS, filename string) ([]core.Entry, error) {
 	logFile, err := fs.ReadFile(fileSystem, filename)
 	if err != nil {
-		return core.Entry{}, err
+		return nil, err
 	}
 
-	var log core.Entry
-	err = json.Unmarshal(logFile, &log)
-	if err != nil {
-		return core.Entry{}, err
+	var logs []core.Entry
+	decoder := json.NewDecoder(bytes.NewReader(logFile))
+
+	for {
+		var entry core.Entry
+		err := decoder.Decode(&entry)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		logs = append(logs, entry)
 	}
 
-	return log, nil
+	return logs, nil
 }
 
 // func (o *OSFileSystem) Save(writer io.Writer, name string, data []byte, perm fs.FileMode) error {

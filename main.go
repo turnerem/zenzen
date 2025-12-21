@@ -37,7 +37,7 @@ func main() {
 	}
 
 	// Initialize filesystem and notes
-	fs := storage.NewFSFileSystem("notes", os.DirFS(*dir))
+	fs := storage.NewFSFileSystem( os.DirFS(*dir))
 	notes := service.NewNotes(fs)
 
 	// Get all logs sorted by timestamp

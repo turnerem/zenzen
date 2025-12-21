@@ -6,14 +6,14 @@ import (
 )
 
 var (
-	DataK8s = `{
+	data = `{
 	"Title": "K8s",
 	"Tags": ["learning", "open-source"],
 	"Predicted Duration": "6d",
 	"Duration": "",
 	"Body": "The journey has just begun."
-}`
-	DataSystemDesign = `{
+}
+{
 	"Title": "System Design",
 	"Tags": ["interviews"],
 	"Predicted Duration": "7d",
@@ -25,12 +25,11 @@ var (
 func TestOSFileSystem(t *testing.T) {
 	t.Run("GetAll logs from filesystem", func(t *testing.T) {
 		fs := fstest.MapFS{
-			"notes/K8s.json":          {Data: []byte(DataK8s)},
-			"notes/SystemDesign.json": {Data: []byte(DataSystemDesign)},
+			"notes.json": {Data: []byte(data)},
 		}
 
 		// Setup
-		storage := NewFSFileSystem("notes", fs)
+		storage := NewFSFileSystem(fs)
 
 		// Execute
 		logs, err := storage.GetAll()
