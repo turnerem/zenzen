@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
@@ -57,12 +58,28 @@ func NewModel(entries map[string]core.Entry, saveEntryFn SaveEntryFunc, deleteEn
 	bodyTextarea := textarea.New()
 	bodyTextarea.Placeholder = "enter body..."
 
-	// Build initial ordering from entries
-	// TODO: Add sorting options (by timestamp, title, etc.)
+	// Build initial ordering from entries sorted by StartedAtTimestamp (most recent first)
 	orderedIDs := make([]string, 0, len(entries))
 	for id := range entries {
 		orderedIDs = append(orderedIDs, id)
 	}
+
+	// Sort by StartedAtTimestamp, most recent first
+	sort.Slice(orderedIDs, func(i, j int) bool {
+		entryI := entries[orderedIDs[i]]
+		entryJ := entries[orderedIDs[j]]
+
+		// Handle zero timestamps - put entries without timestamps at the end
+		if entryI.StartedAtTimestamp.IsZero() && !entryJ.StartedAtTimestamp.IsZero() {
+			return false
+		}
+		if !entryI.StartedAtTimestamp.IsZero() && entryJ.StartedAtTimestamp.IsZero() {
+			return true
+		}
+
+		// Both have timestamps (or both are zero) - most recent first (descending order)
+		return entryI.StartedAtTimestamp.After(entryJ.StartedAtTimestamp)
+	})
 
 	// Collect all unique tags from all entries
 	tagSet := make(map[string]bool)
