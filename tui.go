@@ -5,8 +5,10 @@ import (
 	"log"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/turnerem/zenzen/core"
@@ -26,7 +28,10 @@ type Model struct {
 	deleteEntryFn DeleteEntryFunc
 	selectedIndex int // Index in OrderedIDs
 	view          string // "list", "detail", or "edit"
-	textarea      textarea.Model
+	tagsInput     textinput.Model
+	estimatedInput textinput.Model
+	bodyTextarea  textarea.Model
+	focusIndex    int // 0=tags, 1=estimated, 2=body
 	renderer      *UIRenderer
 	width         int
 	height        int
@@ -34,10 +39,19 @@ type Model struct {
 
 // NewModel creates a new TUI model
 func NewModel(entries map[string]core.Entry, saveEntryFn SaveEntryFunc, deleteEntryFn DeleteEntryFunc) *Model {
-	// Initialize textarea
-	ta := textarea.New()
-	ta.Placeholder = "Enter log body..."
-	ta.Focus()
+	// Initialize tags input
+	tagsInput := textinput.New()
+	tagsInput.Placeholder = "tag1, tag2, tag3"
+	tagsInput.CharLimit = 200
+
+	// Initialize estimated duration input
+	estimatedInput := textinput.New()
+	estimatedInput.Placeholder = "e.g. 5d, 2h, 30m"
+	estimatedInput.CharLimit = 20
+
+	// Initialize body textarea
+	bodyTextarea := textarea.New()
+	bodyTextarea.Placeholder = "enter body..."
 
 	// Build initial ordering from entries
 	// TODO: Add sorting options (by timestamp, title, etc.)
@@ -47,16 +61,19 @@ func NewModel(entries map[string]core.Entry, saveEntryFn SaveEntryFunc, deleteEn
 	}
 
 	return &Model{
-		entries:       entries,
-		orderedIDs:    orderedIDs,
-		saveEntryFn:   saveEntryFn,
-		deleteEntryFn: deleteEntryFn,
-		selectedIndex: 0,
-		view:          "list",
-		textarea:      ta,
-		renderer:      NewUIRenderer(NewMinimalUI()),
-		width:         80,
-		height:        24,
+		entries:        entries,
+		orderedIDs:     orderedIDs,
+		saveEntryFn:    saveEntryFn,
+		deleteEntryFn:  deleteEntryFn,
+		selectedIndex:  0,
+		view:           "list",
+		tagsInput:      tagsInput,
+		estimatedInput: estimatedInput,
+		bodyTextarea:   bodyTextarea,
+		focusIndex:     0,
+		renderer:       NewUIRenderer(NewMinimalUI()),
+		width:          80,
+		height:         24,
 	}
 }
 
@@ -69,26 +86,71 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
-	// When in edit mode, let textarea handle its updates
+	// When in edit mode, handle input updates
 	if m.view == "edit" {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
-			// Handle our escape/save logic first
-			if msg.String() == "esc" {
+			switch msg.String() {
+			case "esc":
+				// Save all fields
 				selectedID := m.orderedIDs[m.selectedIndex]
 				entry := m.entries[selectedID]
-				entry.Body = m.textarea.Value()
+
+				// Parse tags from comma-separated input
+				tagsStr := m.tagsInput.Value()
+				if tagsStr != "" {
+					tags := strings.Split(tagsStr, ",")
+					for i := range tags {
+						tags[i] = strings.TrimSpace(tags[i])
+					}
+					entry.Tags = tags
+				} else {
+					entry.Tags = []string{}
+				}
+
+				// Parse estimated duration
+				estimatedStr := m.estimatedInput.Value()
+				if estimatedStr != "" {
+					entry.EstimatedDuration = parseDuration(estimatedStr)
+				}
+
+				// Save body
+				entry.Body = m.bodyTextarea.Value()
+
 				m.entries[selectedID] = entry
-				// Save to disk
 				if err := m.saveEntryFn(entry); err != nil {
 					log.Printf("Error saving entry: %v", err)
 				}
 				m.view = "list"
 				return m, nil
+			case "tab":
+				// Cycle through inputs
+				m.focusIndex = (m.focusIndex + 1) % 3
+				if m.focusIndex == 0 {
+					m.tagsInput.Focus()
+					m.estimatedInput.Blur()
+					m.bodyTextarea.Blur()
+				} else if m.focusIndex == 1 {
+					m.tagsInput.Blur()
+					m.estimatedInput.Focus()
+					m.bodyTextarea.Blur()
+				} else {
+					m.tagsInput.Blur()
+					m.estimatedInput.Blur()
+					m.bodyTextarea.Focus()
+				}
+				return m, nil
 			}
-			// Otherwise let textarea handle the key
 		}
-		m.textarea, cmd = m.textarea.Update(msg)
+
+		// Update the focused input
+		if m.focusIndex == 0 {
+			m.tagsInput, cmd = m.tagsInput.Update(msg)
+		} else if m.focusIndex == 1 {
+			m.estimatedInput, cmd = m.estimatedInput.Update(msg)
+		} else {
+			m.bodyTextarea, cmd = m.bodyTextarea.Update(msg)
+		}
 		return m, cmd
 	}
 
@@ -119,10 +181,29 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "enter", " ":
 		if m.view == "list" && len(m.entries) > 0 {
-			// Load current entry body into textarea
+			// Load current entry into all inputs
 			selectedID := m.orderedIDs[m.selectedIndex]
 			entry := m.entries[selectedID]
-			m.textarea.SetValue(entry.Body)
+
+			// Load tags
+			m.tagsInput.SetValue(strings.Join(entry.Tags, ", "))
+
+			// Load estimated duration
+			if entry.EstimatedDuration > 0 {
+				m.estimatedInput.SetValue(formatDuration(entry.EstimatedDuration))
+			} else {
+				m.estimatedInput.SetValue("")
+			}
+
+			// Load body
+			m.bodyTextarea.SetValue(entry.Body)
+
+			// Focus on tags first
+			m.focusIndex = 0
+			m.tagsInput.Focus()
+			m.estimatedInput.Blur()
+			m.bodyTextarea.Blur()
+
 			m.view = "edit"
 		}
 	case "d": // delete log
@@ -307,10 +388,10 @@ func (m Model) renderEditView() string {
 	labelStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("8"))
 
-	content = append(content, titleStyle.Render("Editing: "+log.Title))
+	content = append(content, titleStyle.Render("editing: "+log.Title))
 	content = append(content, "")
 
-	// Timestamps at the top
+	// Timestamps at the top (read-only)
 	timestampStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("8"))
 
@@ -332,27 +413,23 @@ func (m Model) renderEditView() string {
 
 	content = append(content, "")
 
-	// Tags
-	if len(log.Tags) > 0 {
-		content = append(content, labelStyle.Render("Tags: ")+strings.Join(log.Tags, ", "))
-	}
-
-	// Duration info
-	if log.EstimatedDuration > 0 {
-		content = append(content, labelStyle.Render(fmt.Sprintf("Estimated: %v", log.EstimatedDuration)))
-	}
-
+	// Editable fields
+	content = append(content, labelStyle.Render("tags:"))
+	content = append(content, m.tagsInput.View())
 	content = append(content, "")
-	content = append(content, labelStyle.Render("Body:"))
 
-	// Textarea for editing body
-	content = append(content, m.textarea.View())
+	content = append(content, labelStyle.Render("estimated:"))
+	content = append(content, m.estimatedInput.View())
+	content = append(content, "")
+
+	content = append(content, labelStyle.Render("body:"))
+	content = append(content, m.bodyTextarea.View())
 	content = append(content, "")
 
 	// Footer
 	footer := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("8")).
-		Render("esc save & exit | ctrl+c quit without saving")
+		Render("tab switch field | esc save & exit | ctrl+c quit without saving")
 
 	content = append(content, footer)
 
@@ -366,4 +443,34 @@ func StartTUI(entries map[string]core.Entry, saveEntryFn SaveEntryFunc, deleteEn
 
 	_, err := p.Run()
 	return err
+}
+
+// formatDuration converts time.Duration to a human-readable string like "5d", "2h"
+func formatDuration(d time.Duration) string {
+	if d == 0 {
+		return ""
+	}
+
+	// Convert to largest unit possible
+	weeks := d / core.WEEK
+	if weeks > 0 && d%core.WEEK == 0 {
+		return fmt.Sprintf("%dw", weeks)
+	}
+
+	days := d / core.DAY
+	if days > 0 && d%core.DAY == 0 {
+		return fmt.Sprintf("%dd", days)
+	}
+
+	hours := d / time.Hour
+	if hours > 0 && d%time.Hour == 0 {
+		return fmt.Sprintf("%dh", hours)
+	}
+
+	minutes := d / time.Minute
+	if minutes > 0 && d%time.Minute == 0 {
+		return fmt.Sprintf("%dm", minutes)
+	}
+
+	return fmt.Sprintf("%dh", int(d.Hours()))
 }

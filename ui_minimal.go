@@ -87,31 +87,31 @@ func (m *MinimalUI) RenderEntry(entry core.Entry) string {
 	// Tags
 	if len(entry.Tags) > 0 {
 		tagsStr := strings.Join(entry.Tags, ", ")
-		parts = append(parts, labelStyle.Render("🏷 Tags:"), valueStyle.Render("  "+tagsStr))
+		parts = append(parts, labelStyle.Render("🏷 tags:"), valueStyle.Render("  "+tagsStr))
 	} else {
-		parts = append(parts, labelStyle.Render("🏷 Tags:"), valueStyle.Render(""))
+		parts = append(parts, labelStyle.Render("🏷 tags:"), valueStyle.Render(""))
 	}
 
 	// TTC Prediction
 	if entry.EstimatedDuration.String() != "" {
-		parts = append(parts, labelStyle.Render("⏱ Predicted:"), valueStyle.Render("  "+entry.EstimatedDuration.String()))
+		parts = append(parts, labelStyle.Render("⏱ estimated:"), valueStyle.Render("  "+entry.EstimatedDuration.String()))
 	} else {
-		parts = append(parts, labelStyle.Render("⏱ Predicted:"), valueStyle.Render(""))
+		parts = append(parts, labelStyle.Render("⏱ estimated:"), valueStyle.Render(""))
 	}
 
 	// TTC Actual
 	if !entry.EndedAtTimestamp.IsZero() && !entry.StartedAtTimestamp.IsZero() {
 		duration := entry.EndedAtTimestamp.Sub(entry.StartedAtTimestamp)
 		durFmt := fmt.Sprintf("%v", duration)
-		parts = append(parts, labelStyle.Render("✓ Actual:"), valueStyle.Render("  "+durFmt))
+		parts = append(parts, labelStyle.Render("✓ actual:"), valueStyle.Render("  "+durFmt))
 	} else {
-		parts = append(parts, labelStyle.Render("✓ Actual:"), valueStyle.Render(""))
+		parts = append(parts, labelStyle.Render("✓ actual:"), valueStyle.Render(""))
 	}
 
 	parts = append(parts, "")
 
 	// Body
-	parts = append(parts, labelStyle.Render("📝 Notes:"))
+	parts = append(parts, labelStyle.Render("📝 body:"))
 	if entry.Body != "" {
 		parts = append(parts, valueStyle.Render(entry.Body))
 	} else {
