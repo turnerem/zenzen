@@ -1,13 +1,13 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
+	"github.com/turnerem/zenzen/config"
 	"github.com/turnerem/zenzen/core"
+	"github.com/turnerem/zenzen/storage"
 )
 
 // parseDuration converts strings like "5d", "2h", "3w" to time.Duration
@@ -33,17 +33,20 @@ func parseDuration(s string) time.Duration {
 }
 
 func createTestData() error {
-	home, err := os.UserHomeDir()
+	ctx := context.Background()
+
+	// Get database connection string
+	connString, err := config.GetConnectionString()
 	if err != nil {
-		return err
+		return fmt.Errorf("error loading config: %w", err)
 	}
 
-	logsDir := filepath.Join(home, ".zenzen")
-
-	// Create directory
-	if err := os.MkdirAll(logsDir, 0755); err != nil {
-		return err
+	// Initialize SQL storage
+	store, err := storage.NewSQLStorage(ctx, connString)
+	if err != nil {
+		return fmt.Errorf("error connecting to database: %w", err)
 	}
+	defer store.Close(ctx)
 
 	testLogs := []struct {
 		id                string
@@ -110,18 +113,9 @@ func createTestData() error {
 		},
 	}
 
-	// Create single notes.json file
-	notesFile := filepath.Join(logsDir, "notes.json")
-	f, err := os.Create(notesFile)
-	if err != nil {
-		return fmt.Errorf("error creating notes file: %w", err)
-	}
-	defer f.Close()
-
-	encoder := json.NewEncoder(f)
-
+	// Save each entry to the database
 	for _, log := range testLogs {
-		logData := core.Entry{
+		entry := core.Entry{
 			ID:                log.id,
 			Title:             log.title,
 			Tags:              log.tags,
@@ -131,14 +125,13 @@ func createTestData() error {
 			Body:              log.body,
 		}
 
-		// Encode to file (each entry on its own line)
-		if err := encoder.Encode(logData); err != nil {
-			return fmt.Errorf("error encoding log %s: %w", log.title, err)
+		if err := store.SaveEntry(entry); err != nil {
+			return fmt.Errorf("error saving entry %s: %w", log.title, err)
 		}
 
 		fmt.Printf("✓ Added %s\n", log.title)
 	}
 
-	fmt.Printf("\nTest data created in %s\n", notesFile)
+	fmt.Printf("\nTest data created in database\n")
 	return nil
 }

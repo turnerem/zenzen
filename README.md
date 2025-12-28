@@ -35,6 +35,12 @@ Chart diff of predicted versus actual time to completion:
 ```
 ```
 
+## Environment Variables
+
+```
+ZENZEN_DB_CONNECTION
+```
+
 ### How it works
 
 Everything is done in the terminal. To start a new log, run `gli add <TITLE>` in the command line. TITLE must be unique in the directory. This will open a new doc that can be navigated with vim commands. The doc follows a template:

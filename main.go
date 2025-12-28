@@ -1,11 +1,12 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"os"
-	"path/filepath"
 
+	"github.com/turnerem/zenzen/config"
 	"github.com/turnerem/zenzen/core"
 	"github.com/turnerem/zenzen/service"
 	"github.com/turnerem/zenzen/storage"
@@ -17,43 +18,45 @@ func main() {
 		if err := createTestData(); err != nil {
 			log.Fatal("Error creating test data:", err)
 		}
+		return
 	}
 
-	dir := flag.String("dir", "", "Directory for logs (default: ~/.zenzen)")
 	flag.Parse()
 
-	// Set default directory
-	if *dir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			log.Fatal("Error: could not determine home directory:", err)
-		}
-		*dir = filepath.Join(home, ".zenzen")
-	}
+	ctx := context.Background()
 
-	// Create directory if it doesn't exist
-	if err := os.MkdirAll(*dir, 0755); err != nil {
-		log.Fatal("Error: could not create logs directory:", err)
-	}
-
-	// Initialize filesystem and notes
-	fs := storage.NewFSFileSystem(*dir)
-	notes := service.NewNotes(fs)
-
-	// Get all logs sorted by timestamp
-	err := notes.LoadAll()
+	// Get database connection string from env var or config file
+	connString, err := config.GetConnectionString()
 	if err != nil {
-		log.Fatal("Error: could not load notes:", err)
+		log.Fatal("Error loading config: ", err)
 	}
 
-	// Create save callback that doesn't expose the service layer
-	saveFn := func(entries map[string]core.Entry) error {
-		notes.Entries = entries
-		return notes.Save()
+	// Initialize SQL storage
+	store, err := storage.NewSQLStorage(ctx, connString)
+	if err != nil {
+		log.Fatalf("Error connecting to database: %v", err)
+	}
+	defer store.Close(ctx)
+
+	// Initialize notes service
+	notes := service.NewNotes(store)
+
+	// Load all notes
+	if err := notes.LoadAll(); err != nil {
+		log.Fatalf("Error loading notes: %v", err)
+	}
+
+	// Create callbacks for TUI
+	saveEntryFn := func(entry core.Entry) error {
+		return notes.SaveEntry(entry)
+	}
+
+	deleteEntryFn := func(id string) error {
+		return notes.Delete(id)
 	}
 
 	// Start interactive TUI
-	if err := StartTUI(notes.Entries, saveFn); err != nil {
-		log.Fatal("Error starting TUI:", err)
+	if err := StartTUI(notes.Entries, saveEntryFn, deleteEntryFn); err != nil {
+		log.Fatalf("Error starting TUI: %v", err)
 	}
 }

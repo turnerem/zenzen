@@ -55,8 +55,13 @@ func (m *MockStore) GetAll() (map[string]core.Entry, error) {
 	}, nil
 }
 
-func (m *MockStore) Save(entries map[string]core.Entry) error {
+func (m *MockStore) SaveEntry(entry core.Entry) error {
 	// Mock save - does nothing
+	return nil
+}
+
+func (m *MockStore) DeleteEntry(id string) error {
+	// Mock delete - does nothing
 	return nil
 }
 

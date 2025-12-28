@@ -12,14 +12,18 @@ import (
 	"github.com/turnerem/zenzen/core"
 )
 
-// SaveFunc is a function that saves entries to storage
-type SaveFunc func(entries map[string]core.Entry) error
+// SaveEntryFunc is a function that saves a single entry to storage
+type SaveEntryFunc func(entry core.Entry) error
+
+// DeleteEntryFunc is a function that deletes a single entry from storage
+type DeleteEntryFunc func(id string) error
 
 // Model represents the TUI state
 type Model struct {
 	entries       map[string]core.Entry
 	orderedIDs    []string
-	saveFn        SaveFunc
+	saveEntryFn   SaveEntryFunc
+	deleteEntryFn DeleteEntryFunc
 	selectedIndex int // Index in OrderedIDs
 	view          string // "list", "detail", or "edit"
 	textarea      textarea.Model
@@ -29,7 +33,7 @@ type Model struct {
 }
 
 // NewModel creates a new TUI model
-func NewModel(entries map[string]core.Entry, saveFn SaveFunc) *Model {
+func NewModel(entries map[string]core.Entry, saveEntryFn SaveEntryFunc, deleteEntryFn DeleteEntryFunc) *Model {
 	// Initialize textarea
 	ta := textarea.New()
 	ta.Placeholder = "Enter log body..."
@@ -45,7 +49,8 @@ func NewModel(entries map[string]core.Entry, saveFn SaveFunc) *Model {
 	return &Model{
 		entries:       entries,
 		orderedIDs:    orderedIDs,
-		saveFn:        saveFn,
+		saveEntryFn:   saveEntryFn,
+		deleteEntryFn: deleteEntryFn,
 		selectedIndex: 0,
 		view:          "list",
 		textarea:      ta,
@@ -75,8 +80,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				entry.Body = m.textarea.Value()
 				m.entries[selectedID] = entry
 				// Save to disk
-				if err := m.saveFn(m.entries); err != nil {
-					log.Printf("Error saving notes: %v", err)
+				if err := m.saveEntryFn(entry); err != nil {
+					log.Printf("Error saving entry: %v", err)
 				}
 				m.view = "list"
 				return m, nil
@@ -126,9 +131,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			delete(m.entries, selectedID)
 			// Remove from orderedIDs
 			m.orderedIDs = append(m.orderedIDs[:m.selectedIndex], m.orderedIDs[m.selectedIndex+1:]...)
-			// Save to disk
-			if err := m.saveFn(m.entries); err != nil {
-				log.Printf("Error saving notes: %v", err)
+			// Delete from storage
+			if err := m.deleteEntryFn(selectedID); err != nil {
+				log.Printf("Error deleting entry: %v", err)
 			}
 			// Adjust selectedIndex if needed
 			if m.selectedIndex >= len(m.orderedIDs) && m.selectedIndex > 0 {
@@ -333,8 +338,8 @@ func (m Model) renderEditView() string {
 }
 
 // StartTUI starts the interactive TUI
-func StartTUI(entries map[string]core.Entry, saveFn SaveFunc) error {
-	model := NewModel(entries, saveFn)
+func StartTUI(entries map[string]core.Entry, saveEntryFn SaveEntryFunc, deleteEntryFn DeleteEntryFunc) error {
+	model := NewModel(entries, saveEntryFn, deleteEntryFn)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	_, err := p.Run()

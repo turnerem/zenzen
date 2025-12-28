@@ -6,3 +6,8 @@ implementation_notes.md
 .DS_Store
 
 notes.txt
+
+# config
+config.yaml
+config.example.yaml
+
