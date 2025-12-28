@@ -22,11 +22,11 @@ func TestSQLStorage_GetAll(t *testing.T) {
 	}
 
 	// Mock the query
-	rows := pgxmock.NewRows([]string{"id", "title", "tags", "started_at", "ended_at", "estimated_duration", "body"}).
-		AddRow("1", "K8s", []string{"learning"}, time.Time{}, time.Time{}, int64(0), "Test body").
-		AddRow("2", "System Design", []string{"interviews"}, time.Time{}, time.Time{}, int64(0), "Test body 2")
+	rows := pgxmock.NewRows([]string{"id", "title", "tags", "started_at_timestamp", "ended_at_timestamp", "last_modified_timestamp", "estimated_duration", "body"}).
+		AddRow("1", "K8s", []string{"learning"}, time.Time{}, time.Time{}, time.Now(), int64(0), "Test body").
+		AddRow("2", "System Design", []string{"interviews"}, time.Time{}, time.Time{}, time.Now(), int64(0), "Test body 2")
 
-	mock.ExpectQuery(`SELECT id, title, tags, started_at, ended_at, estimated_duration, body FROM entries`).
+	mock.ExpectQuery(`SELECT id, title, tags, started_at_timestamp, ended_at_timestamp, last_modified_timestamp, estimated_duration, body FROM entries`).
 		WillReturnRows(rows)
 
 	// Execute
@@ -69,9 +69,9 @@ func TestSQLStorage_SaveEntry(t *testing.T) {
 		Body:  "Test body",
 	}
 
-	// Mock the insert/update query
+	// Mock the insert/update query - use AnyArg() for LastModifiedTimestamp since it's set dynamically
 	mock.ExpectExec(`INSERT INTO entries`).
-		WithArgs("1", "Test Entry", []string{"test"}, entry.StartedAt, entry.EndedAt, int64(0), "Test body").
+		WithArgs("1", "Test Entry", []string{"test"}, entry.StartedAtTimestamp, entry.EndedAtTimestamp, pgxmock.AnyArg(), int64(0), "Test body").
 		WillReturnResult(pgxmock.NewResult("INSERT", 1))
 
 	// Execute

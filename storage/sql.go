@@ -56,8 +56,9 @@ func (s *SQLStorage) createTableIfNotExists(ctx context.Context) error {
 			id VARCHAR(255) PRIMARY KEY,
 			title TEXT NOT NULL,
 			tags TEXT[],
-			started_at TIMESTAMPTZ,
-			ended_at TIMESTAMPTZ,
+			started_at_timestamp TIMESTAMPTZ,
+			ended_at_timestamp TIMESTAMPTZ,
+			last_modified_timestamp TIMESTAMPTZ,
 			estimated_duration BIGINT,
 			body TEXT
 		)
@@ -76,7 +77,7 @@ func (s *SQLStorage) GetAll() (map[string]core.Entry, error) {
 	ctx := context.Background()
 
 	query, args, err := s.psql.
-		Select("id", "title", "tags", "started_at", "ended_at", "estimated_duration", "body").
+		Select("id", "title", "tags", "started_at_timestamp", "ended_at_timestamp", "last_modified_timestamp", "estimated_duration", "body").
 		From(TABLE_NAME).
 		ToSql()
 
@@ -95,7 +96,7 @@ func (s *SQLStorage) GetAll() (map[string]core.Entry, error) {
 	for rows.Next() {
 		var entry core.Entry
 		var tags []string
-		var startedAt, endedAt pgtype.Timestamptz
+		var startedAt, endedAt, lastModified pgtype.Timestamptz
 		var estimatedDuration int64
 
 		err := rows.Scan(
@@ -104,6 +105,7 @@ func (s *SQLStorage) GetAll() (map[string]core.Entry, error) {
 			&tags,
 			&startedAt,
 			&endedAt,
+			&lastModified,
 			&estimatedDuration,
 			&entry.Body,
 		)
@@ -113,10 +115,13 @@ func (s *SQLStorage) GetAll() (map[string]core.Entry, error) {
 
 		entry.Tags = tags
 		if startedAt.Valid {
-			entry.StartedAt = startedAt.Time
+			entry.StartedAtTimestamp = startedAt.Time
 		}
 		if endedAt.Valid {
-			entry.EndedAt = endedAt.Time
+			entry.EndedAtTimestamp = endedAt.Time
+		}
+		if lastModified.Valid {
+			entry.LastModifiedTimestamp = lastModified.Time
 		}
 		entry.EstimatedDuration = time.Duration(estimatedDuration)
 
@@ -134,19 +139,23 @@ func (s *SQLStorage) GetAll() (map[string]core.Entry, error) {
 func (s *SQLStorage) SaveEntry(entry core.Entry) error {
 	ctx := context.Background()
 
+	// Set last modified timestamp to current time
+	entry.LastModifiedTimestamp = time.Now()
+
 	query, args, err := s.psql.
 		Insert(TABLE_NAME).
-		Columns("id", "title", "tags", "started_at", "ended_at", "estimated_duration", "body").
+		Columns("id", "title", "tags", "started_at_timestamp", "ended_at_timestamp", "last_modified_timestamp", "estimated_duration", "body").
 		Values(
 			entry.ID,
 			entry.Title,
 			entry.Tags,
-			entry.StartedAt,
-			entry.EndedAt,
+			entry.StartedAtTimestamp,
+			entry.EndedAtTimestamp,
+			entry.LastModifiedTimestamp,
 			int64(entry.EstimatedDuration),
 			entry.Body,
 		).
-		Suffix("ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, tags = EXCLUDED.tags, started_at = EXCLUDED.started_at, ended_at = EXCLUDED.ended_at, estimated_duration = EXCLUDED.estimated_duration, body = EXCLUDED.body").
+		Suffix("ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, tags = EXCLUDED.tags, started_at_timestamp = EXCLUDED.started_at_timestamp, ended_at_timestamp = EXCLUDED.ended_at_timestamp, last_modified_timestamp = EXCLUDED.last_modified_timestamp, estimated_duration = EXCLUDED.estimated_duration, body = EXCLUDED.body").
 		ToSql()
 
 	if err != nil {

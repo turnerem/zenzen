@@ -52,17 +52,35 @@ func (m *MinimalUI) RenderEntry(entry core.Entry) string {
 	valueStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("7"))
 
+	timestampStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("8"))
+
 	var parts []string
 
-	// Title and start time on same line
+	// Title
 	titleStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("4")).
 		Bold(true)
-	titleLine := entry.Title
-	if entry.StartedAt.IsZero() {
-		titleLine = entry.StartedAt.Format("2025-01-30 15:04") + " " + entry.Title
+	parts = append(parts, titleStyle.Render(entry.Title))
+
+	parts = append(parts, "")
+
+	// Timestamps at the top
+	if !entry.StartedAtTimestamp.IsZero() {
+		parts = append(parts, timestampStyle.Render(fmt.Sprintf("%s: %s",
+			core.FieldDisplayNames["StartedAtTimestamp"],
+			entry.StartedAtTimestamp.Format("2006-01-02 15:04"))))
 	}
-	parts = append(parts, titleStyle.Render(titleLine))
+	if !entry.EndedAtTimestamp.IsZero() {
+		parts = append(parts, timestampStyle.Render(fmt.Sprintf("%s: %s",
+			core.FieldDisplayNames["EndedAtTimestamp"],
+			entry.EndedAtTimestamp.Format("2006-01-02 15:04"))))
+	}
+	if !entry.LastModifiedTimestamp.IsZero() {
+		parts = append(parts, timestampStyle.Render(fmt.Sprintf("%s: %s",
+			core.FieldDisplayNames["LastModifiedTimestamp"],
+			entry.LastModifiedTimestamp.Format("2006-01-02 15:04"))))
+	}
 
 	parts = append(parts, "")
 
@@ -82,9 +100,9 @@ func (m *MinimalUI) RenderEntry(entry core.Entry) string {
 	}
 
 	// TTC Actual
-	if entry.EndedAt.IsZero() {
-		duration := entry.EndedAt.Sub(entry.StartedAt)
-		durFmt := fmt.Sprintf("%d", duration)
+	if !entry.EndedAtTimestamp.IsZero() && !entry.StartedAtTimestamp.IsZero() {
+		duration := entry.EndedAtTimestamp.Sub(entry.StartedAtTimestamp)
+		durFmt := fmt.Sprintf("%v", duration)
 		parts = append(parts, labelStyle.Render("✓ Actual:"), valueStyle.Render("  "+durFmt))
 	} else {
 		parts = append(parts, labelStyle.Render("✓ Actual:"), valueStyle.Render(""))

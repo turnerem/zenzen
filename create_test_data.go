@@ -116,13 +116,14 @@ func createTestData() error {
 	// Save each entry to the database
 	for _, log := range testLogs {
 		entry := core.Entry{
-			ID:                log.id,
-			Title:             log.title,
-			Tags:              log.tags,
-			StartedAt:         log.startedAt,
-			EndedAt:           log.endedAt,
-			EstimatedDuration: log.estimatedDuration,
-			Body:              log.body,
+			ID:                    log.id,
+			Title:                 log.title,
+			Tags:                  log.tags,
+			StartedAtTimestamp:    log.startedAt,
+			EndedAtTimestamp:      log.endedAt,
+			EstimatedDuration:     log.estimatedDuration,
+			Body:                  log.body,
+			LastModifiedTimestamp: time.Now(),
 		}
 
 		if err := store.SaveEntry(entry); err != nil {

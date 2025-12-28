@@ -310,6 +310,28 @@ func (m Model) renderEditView() string {
 	content = append(content, titleStyle.Render("Editing: "+log.Title))
 	content = append(content, "")
 
+	// Timestamps at the top
+	timestampStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("8"))
+
+	if !log.StartedAtTimestamp.IsZero() {
+		content = append(content, timestampStyle.Render(fmt.Sprintf("%s: %s",
+			core.FieldDisplayNames["StartedAtTimestamp"],
+			log.StartedAtTimestamp.Format("2006-01-02 15:04"))))
+	}
+	if !log.EndedAtTimestamp.IsZero() {
+		content = append(content, timestampStyle.Render(fmt.Sprintf("%s: %s",
+			core.FieldDisplayNames["EndedAtTimestamp"],
+			log.EndedAtTimestamp.Format("2006-01-02 15:04"))))
+	}
+	if !log.LastModifiedTimestamp.IsZero() {
+		content = append(content, timestampStyle.Render(fmt.Sprintf("%s: %s",
+			core.FieldDisplayNames["LastModifiedTimestamp"],
+			log.LastModifiedTimestamp.Format("2006-01-02 15:04"))))
+	}
+
+	content = append(content, "")
+
 	// Tags
 	if len(log.Tags) > 0 {
 		content = append(content, labelStyle.Render("Tags: ")+strings.Join(log.Tags, ", "))

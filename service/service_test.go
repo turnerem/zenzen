@@ -30,21 +30,23 @@ type MockStore struct {
 
 var (
 	k8sLog = core.Entry{
-		ID:                "1",
-		Title:             "K8s",
-		Tags:              []string{"learning", "open-source"},
-		EstimatedDuration: time.Hour * 3,
-		StartedAt:         time.Date(2025, 12, 20, 10, 0, 0, 0, time.UTC),
-		Body:              "The journey has just begun.",
+		ID:                    "1",
+		Title:                 "K8s",
+		Tags:                  []string{"learning", "open-source"},
+		EstimatedDuration:     time.Hour * 3,
+		StartedAtTimestamp:    time.Date(2025, 12, 20, 10, 0, 0, 0, time.UTC),
+		LastModifiedTimestamp: time.Date(2025, 12, 20, 10, 0, 0, 0, time.UTC),
+		Body:                  "The journey has just begun.",
 	}
 	systemDesignLog = core.Entry{
-		ID:                "2",
-		Title:             "System Design",
-		Tags:              []string{"interviews"},
-		EstimatedDuration: time.Hour * 4,
-		StartedAt:         time.Date(2026, 1, 2, 15, 4, 5, 0, time.UTC),
-		EndedAt:           time.Date(2026, 1, 10, 17, 4, 5, 0, time.UTC),
-		Body:              "Books combined with youtube resources were very helpful.",
+		ID:                    "2",
+		Title:                 "System Design",
+		Tags:                  []string{"interviews"},
+		EstimatedDuration:     time.Hour * 4,
+		StartedAtTimestamp:    time.Date(2026, 1, 2, 15, 4, 5, 0, time.UTC),
+		EndedAtTimestamp:      time.Date(2026, 1, 10, 17, 4, 5, 0, time.UTC),
+		LastModifiedTimestamp: time.Date(2026, 1, 10, 17, 4, 5, 0, time.UTC),
+		Body:                  "Books combined with youtube resources were very helpful.",
 	}
 )
 
