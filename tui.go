@@ -50,7 +50,7 @@ func NewModel(entries map[string]core.Entry, saveEntryFn SaveEntryFunc, deleteEn
 
 	// Initialize estimated duration input
 	estimatedInput := textinput.New()
-	estimatedInput.Placeholder = "e.g. 5d, 2h, 30m"
+	estimatedInput.Placeholder = "e.g. 5d, 1h30m, 2d5h (d/h/m/w)"
 	estimatedInput.CharLimit = 20
 
 	// Initialize body textarea
@@ -219,7 +219,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.updateTagSuggestions()
 			}
 		} else if m.focusIndex == 1 {
+			oldVal := m.estimatedInput.Value()
 			m.estimatedInput, cmd = m.estimatedInput.Update(msg)
+			newVal := m.estimatedInput.Value()
+
+			// Validate estimated duration input
+			if newVal != oldVal && !m.isValidDurationInput(newVal) {
+				// Revert to old value if invalid
+				m.estimatedInput.SetValue(oldVal)
+			}
 		} else {
 			m.bodyTextarea, cmd = m.bodyTextarea.Update(msg)
 		}
@@ -549,34 +557,42 @@ func StartTUI(entries map[string]core.Entry, saveEntryFn SaveEntryFunc, deleteEn
 	return err
 }
 
-// formatDuration converts time.Duration to a human-readable string like "5d", "2h"
+// formatDuration converts time.Duration to a human-readable string like "5d", "1h30m"
 func formatDuration(d time.Duration) string {
 	if d == 0 {
 		return ""
 	}
 
-	// Convert to largest unit possible
+	var result string
+
+	// Weeks
 	weeks := d / core.WEEK
-	if weeks > 0 && d%core.WEEK == 0 {
-		return fmt.Sprintf("%dw", weeks)
+	if weeks > 0 {
+		result += fmt.Sprintf("%dw", weeks)
+		d -= weeks * core.WEEK
 	}
 
+	// Days
 	days := d / core.DAY
-	if days > 0 && d%core.DAY == 0 {
-		return fmt.Sprintf("%dd", days)
+	if days > 0 {
+		result += fmt.Sprintf("%dd", days)
+		d -= days * core.DAY
 	}
 
+	// Hours
 	hours := d / time.Hour
-	if hours > 0 && d%time.Hour == 0 {
-		return fmt.Sprintf("%dh", hours)
+	if hours > 0 {
+		result += fmt.Sprintf("%dh", hours)
+		d -= hours * time.Hour
 	}
 
+	// Minutes
 	minutes := d / time.Minute
-	if minutes > 0 && d%time.Minute == 0 {
-		return fmt.Sprintf("%dm", minutes)
+	if minutes > 0 {
+		result += fmt.Sprintf("%dm", minutes)
 	}
 
-	return fmt.Sprintf("%dh", int(d.Hours()))
+	return result
 }
 
 // collectAllTags gathers all unique tags from all entries
@@ -671,4 +687,48 @@ func (m *Model) tagAlreadyInInput(tag, input string) bool {
 		}
 	}
 	return false
+}
+
+// isValidDurationInput validates that the duration input contains only valid units
+// Allows formats like: 5d, 1h30m, 2d5h, 1w2d3h30m
+func (m *Model) isValidDurationInput(input string) bool {
+	input = strings.TrimSpace(input)
+
+	// Empty input is valid
+	if input == "" {
+		return true
+	}
+
+	// Parse character by character
+	// Valid pattern: (digit+)(unit)(digit+)(unit)...
+	i := 0
+
+	for i < len(input) {
+		// Expect at least one digit
+		if i >= len(input) || input[i] < '0' || input[i] > '9' {
+			return false
+		}
+
+		// Consume all consecutive digits
+		for i < len(input) && input[i] >= '0' && input[i] <= '9' {
+			i++
+		}
+
+		// If we reached the end, that's OK (still typing the number)
+		if i >= len(input) {
+			return true
+		}
+
+		// Next character must be a valid unit
+		if input[i] != 'd' && input[i] != 'h' && input[i] != 'm' && input[i] != 'w' {
+			return false
+		}
+
+		// Move past the unit
+		i++
+
+		// Continue to next segment (if any)
+	}
+
+	return true
 }

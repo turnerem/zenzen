@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/turnerem/zenzen/config"
@@ -10,26 +11,45 @@ import (
 	"github.com/turnerem/zenzen/storage"
 )
 
-// parseDuration converts strings like "5d", "2h", "3w" to time.Duration
+// parseDuration converts strings like "5d", "2h", "1h30m", "2d5h" to time.Duration
 func parseDuration(s string) time.Duration {
+	s = strings.TrimSpace(s)
 	if s == "" {
 		return 0
 	}
 
-	var value int
-	var unit string
-	fmt.Sscanf(s, "%d%s", &value, &unit)
+	var total time.Duration
+	var currentNum int
+	hasDigits := false
 
-	switch unit {
-	case "h":
-		return time.Duration(value) * time.Hour
-	case "d":
-		return time.Duration(value) * core.DAY
-	case "w":
-		return time.Duration(value) * core.WEEK
-	default:
-		return 0
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+
+		if ch >= '0' && ch <= '9' {
+			currentNum = currentNum*10 + int(ch-'0')
+			hasDigits = true
+		} else if ch == 'd' || ch == 'h' || ch == 'm' || ch == 'w' {
+			if !hasDigits {
+				continue
+			}
+
+			switch ch {
+			case 'm':
+				total += time.Duration(currentNum) * time.Minute
+			case 'h':
+				total += time.Duration(currentNum) * time.Hour
+			case 'd':
+				total += time.Duration(currentNum) * core.DAY
+			case 'w':
+				total += time.Duration(currentNum) * core.WEEK
+			}
+
+			currentNum = 0
+			hasDigits = false
+		}
 	}
+
+	return total
 }
 
 func createTestData() error {
