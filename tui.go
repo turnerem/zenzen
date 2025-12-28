@@ -22,19 +22,23 @@ type DeleteEntryFunc func(id string) error
 
 // Model represents the TUI state
 type Model struct {
-	entries       map[string]core.Entry
-	orderedIDs    []string
-	saveEntryFn   SaveEntryFunc
-	deleteEntryFn DeleteEntryFunc
-	selectedIndex int // Index in OrderedIDs
-	view          string // "list", "detail", or "edit"
-	tagsInput     textinput.Model
-	estimatedInput textinput.Model
-	bodyTextarea  textarea.Model
-	focusIndex    int // 0=tags, 1=estimated, 2=body
-	renderer      *UIRenderer
-	width         int
-	height        int
+	entries           map[string]core.Entry
+	orderedIDs        []string
+	saveEntryFn       SaveEntryFunc
+	deleteEntryFn     DeleteEntryFunc
+	selectedIndex     int // Index in OrderedIDs
+	view              string // "list", "detail", or "edit"
+	tagsInput         textinput.Model
+	estimatedInput    textinput.Model
+	bodyTextarea      textarea.Model
+	focusIndex        int      // 0=tags, 1=estimated, 2=body
+	availableTags     []string // All unique tags from all entries
+	tagSuggestions    []string // Filtered suggestions based on input
+	selectedSuggest   int      // Index of selected suggestion
+	showTagSuggestions bool    // Whether to show tag suggestions
+	renderer          *UIRenderer
+	width             int
+	height            int
 }
 
 // NewModel creates a new TUI model
@@ -60,20 +64,36 @@ func NewModel(entries map[string]core.Entry, saveEntryFn SaveEntryFunc, deleteEn
 		orderedIDs = append(orderedIDs, id)
 	}
 
+	// Collect all unique tags from all entries
+	tagSet := make(map[string]bool)
+	for _, entry := range entries {
+		for _, tag := range entry.Tags {
+			tagSet[tag] = true
+		}
+	}
+	availableTags := make([]string, 0, len(tagSet))
+	for tag := range tagSet {
+		availableTags = append(availableTags, tag)
+	}
+
 	return &Model{
-		entries:        entries,
-		orderedIDs:     orderedIDs,
-		saveEntryFn:    saveEntryFn,
-		deleteEntryFn:  deleteEntryFn,
-		selectedIndex:  0,
-		view:           "list",
-		tagsInput:      tagsInput,
-		estimatedInput: estimatedInput,
-		bodyTextarea:   bodyTextarea,
-		focusIndex:     0,
-		renderer:       NewUIRenderer(NewMinimalUI()),
-		width:          80,
-		height:         24,
+		entries:           entries,
+		orderedIDs:        orderedIDs,
+		saveEntryFn:       saveEntryFn,
+		deleteEntryFn:     deleteEntryFn,
+		selectedIndex:     0,
+		view:              "list",
+		tagsInput:         tagsInput,
+		estimatedInput:    estimatedInput,
+		bodyTextarea:      bodyTextarea,
+		focusIndex:        0,
+		availableTags:     availableTags,
+		tagSuggestions:    []string{},
+		selectedSuggest:   0,
+		showTagSuggestions: false,
+		renderer:          NewUIRenderer(NewMinimalUI()),
+		width:             80,
+		height:            24,
 	}
 }
 
@@ -90,6 +110,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.view == "edit" {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
+			// Handle tag suggestions navigation when shown
+			if m.focusIndex == 0 && m.showTagSuggestions && len(m.tagSuggestions) > 0 {
+				switch msg.String() {
+				case "down":
+					if m.selectedSuggest < len(m.tagSuggestions)-1 {
+						m.selectedSuggest++
+					}
+					return m, nil
+				case "up":
+					if m.selectedSuggest > 0 {
+						m.selectedSuggest--
+					}
+					return m, nil
+				case "enter":
+					// Apply selected suggestion
+					selectedTag := m.tagSuggestions[m.selectedSuggest]
+					currentVal := m.tagsInput.Value()
+					cursorPos := m.tagsInput.Position()
+
+					// Find the tag boundaries around the cursor
+					startPos, endPos := m.findTagBoundaries(currentVal, cursorPos)
+
+					// Build new value: before tag + selected tag + after tag
+					newVal := currentVal[:startPos] + selectedTag + currentVal[endPos:]
+					m.tagsInput.SetValue(newVal)
+
+					// Move cursor to end of the inserted tag
+					newCursorPos := startPos + len(selectedTag)
+					m.tagsInput.SetCursor(newCursorPos)
+
+					m.showTagSuggestions = false
+					m.tagSuggestions = []string{}
+					return m, nil
+				}
+			}
+
 			switch msg.String() {
 			case "esc":
 				// Save all fields
@@ -121,7 +177,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if err := m.saveEntryFn(entry); err != nil {
 					log.Printf("Error saving entry: %v", err)
 				}
+
+				// Rebuild available tags after save
+				m.availableTags = m.collectAllTags()
+
 				m.view = "list"
+				m.showTagSuggestions = false
 				return m, nil
 			case "tab":
 				// Cycle through inputs
@@ -130,14 +191,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.tagsInput.Focus()
 					m.estimatedInput.Blur()
 					m.bodyTextarea.Blur()
+					// Update suggestions when returning to tags field
+					m.updateTagSuggestions()
 				} else if m.focusIndex == 1 {
 					m.tagsInput.Blur()
 					m.estimatedInput.Focus()
 					m.bodyTextarea.Blur()
+					m.showTagSuggestions = false
 				} else {
 					m.tagsInput.Blur()
 					m.estimatedInput.Blur()
 					m.bodyTextarea.Focus()
+					m.showTagSuggestions = false
 				}
 				return m, nil
 			}
@@ -145,7 +210,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Update the focused input
 		if m.focusIndex == 0 {
+			oldVal := m.tagsInput.Value()
 			m.tagsInput, cmd = m.tagsInput.Update(msg)
+			newVal := m.tagsInput.Value()
+
+			// Update suggestions if value changed
+			if oldVal != newVal {
+				m.updateTagSuggestions()
+			}
 		} else if m.focusIndex == 1 {
 			m.estimatedInput, cmd = m.estimatedInput.Update(msg)
 		} else {
@@ -203,6 +275,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.tagsInput.Focus()
 			m.estimatedInput.Blur()
 			m.bodyTextarea.Blur()
+
+			// Initialize tag suggestions
+			m.updateTagSuggestions()
 
 			m.view = "edit"
 		}
@@ -416,6 +491,29 @@ func (m Model) renderEditView() string {
 	// Editable fields
 	content = append(content, labelStyle.Render("tags:"))
 	content = append(content, m.tagsInput.View())
+
+	// Show tag suggestions if available
+	if m.showTagSuggestions && len(m.tagSuggestions) > 0 {
+		suggestionStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("7")).
+			Background(lipgloss.Color("8"))
+
+		selectedStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("0")).
+			Background(lipgloss.Color("6"))
+
+		for i, suggestion := range m.tagSuggestions {
+			if i >= 5 { // Limit to 5 suggestions
+				break
+			}
+			if i == m.selectedSuggest {
+				content = append(content, selectedStyle.Render("  > "+suggestion))
+			} else {
+				content = append(content, suggestionStyle.Render("    "+suggestion))
+			}
+		}
+	}
+
 	content = append(content, "")
 
 	content = append(content, labelStyle.Render("estimated:"))
@@ -427,9 +525,15 @@ func (m Model) renderEditView() string {
 	content = append(content, "")
 
 	// Footer
+	var footerText string
+	if m.showTagSuggestions && len(m.tagSuggestions) > 0 {
+		footerText = "↑/↓ select tag | enter apply | tab switch field | esc save & exit"
+	} else {
+		footerText = "tab switch field | esc save & exit | ctrl+c quit without saving"
+	}
 	footer := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("8")).
-		Render("tab switch field | esc save & exit | ctrl+c quit without saving")
+		Render(footerText)
 
 	content = append(content, footer)
 
@@ -473,4 +577,98 @@ func formatDuration(d time.Duration) string {
 	}
 
 	return fmt.Sprintf("%dh", int(d.Hours()))
+}
+
+// collectAllTags gathers all unique tags from all entries
+func (m *Model) collectAllTags() []string {
+	tagSet := make(map[string]bool)
+	for _, entry := range m.entries {
+		for _, tag := range entry.Tags {
+			if tag != "" {
+				tagSet[tag] = true
+			}
+		}
+	}
+
+	tags := make([]string, 0, len(tagSet))
+	for tag := range tagSet {
+		tags = append(tags, tag)
+	}
+	return tags
+}
+
+// updateTagSuggestions updates the tag suggestions based on current input
+func (m *Model) updateTagSuggestions() {
+	input := m.tagsInput.Value()
+	cursorPos := m.tagsInput.Position()
+
+	// Get the tag at the cursor position
+	startPos, endPos := m.findTagBoundaries(input, cursorPos)
+	currentTag := strings.TrimSpace(input[startPos:endPos])
+
+	// Filter available tags based on current input
+	suggestions := []string{}
+
+	if currentTag == "" {
+		// Show all available tags when cursor is in an empty spot
+		for _, tag := range m.availableTags {
+			if !m.tagAlreadyInInput(tag, input) {
+				suggestions = append(suggestions, tag)
+			}
+		}
+	} else {
+		// Filter tags based on what's being typed
+		currentTagLower := strings.ToLower(currentTag)
+		for _, tag := range m.availableTags {
+			if strings.HasPrefix(strings.ToLower(tag), currentTagLower) {
+				// Don't suggest tags that are already in the input
+				if !m.tagAlreadyInInput(tag, input) {
+					suggestions = append(suggestions, tag)
+				}
+			}
+		}
+	}
+
+	m.tagSuggestions = suggestions
+	m.showTagSuggestions = len(suggestions) > 0
+	m.selectedSuggest = 0
+}
+
+// findTagBoundaries finds the start and end position of the tag at the cursor
+func (m *Model) findTagBoundaries(input string, cursorPos int) (start, end int) {
+	// Find the comma before the cursor
+	start = 0
+	for i := cursorPos - 1; i >= 0; i-- {
+		if input[i] == ',' {
+			start = i + 1
+			break
+		}
+	}
+
+	// Find the comma after the cursor
+	end = len(input)
+	for i := cursorPos; i < len(input); i++ {
+		if input[i] == ',' {
+			end = i
+			break
+		}
+	}
+
+	// Trim leading spaces from start position
+	for start < len(input) && input[start] == ' ' {
+		start++
+	}
+
+	return start, end
+}
+
+// tagAlreadyInInput checks if a tag is already in the comma-separated input
+func (m *Model) tagAlreadyInInput(tag, input string) bool {
+	tags := strings.Split(input, ",")
+	for _, t := range tags {
+		if strings.TrimSpace(t) == tag {
+			return true
+		}
+	}
+	return false
 }
