@@ -5,9 +5,22 @@ implementation_notes.md
 # mac
 .DS_Store
 
-notes.txt
+test-api.sh
 
 # config
 config.yaml
 config.example.yaml
+
+# logs
+zenzen.log
+
+# my notes
+notes.txt
+
+# claude notes
+API.md
+ARCHITECTURE.md
+CLOUD_SETUP.md
+COGNITO_SETUP.md
+QUICK_START.md
 
