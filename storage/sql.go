@@ -136,11 +136,9 @@ func (s *SQLStorage) GetAll() (map[string]core.Entry, error) {
 }
 
 // SaveEntry inserts or updates a single entry
+// Note: LastModifiedTimestamp should be set by the caller before calling this method
 func (s *SQLStorage) SaveEntry(entry core.Entry) error {
 	ctx := context.Background()
-
-	// Set last modified timestamp to current time
-	entry.LastModifiedTimestamp = time.Now()
 
 	query, args, err := s.psql.
 		Insert(TABLE_NAME).

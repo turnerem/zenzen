@@ -317,6 +317,7 @@ zenzen/
 - **[QUICK_START.md](QUICK_START.md)** - Fast setup guide
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Architecture and design patterns
 - **[API.md](API.md)** - REST API reference
+- **[LOGGING.md](LOGGING.md)** - Structured logging and monitoring
 - **[CLOUD_SETUP.md](CLOUD_SETUP.md)** - Cloud database setup
 - **[COGNITO_SETUP.md](COGNITO_SETUP.md)** - AWS Cognito authentication
 

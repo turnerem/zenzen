@@ -1,6 +1,8 @@
 package service
 
 import (
+	"time"
+
 	"github.com/turnerem/zenzen/core"
 )
 
@@ -43,7 +45,11 @@ func (l *Notes) Delete(ID string) error {
 }
 
 // SaveEntry persists a single entry to storage
+// Sets LastModifiedTimestamp to current time before saving
 func (l *Notes) SaveEntry(entry core.Entry) error {
+	// Set last modified timestamp for user edits
+	entry.LastModifiedTimestamp = time.Now()
+
 	l.Entries[entry.ID] = entry
 	return l.store.SaveEntry(entry)
 }

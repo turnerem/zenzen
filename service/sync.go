@@ -3,6 +3,8 @@ package service
 import (
 	"log"
 	"time"
+
+	"github.com/turnerem/zenzen/logger"
 )
 
 // SyncService handles background synchronization between local and cloud storage
@@ -26,7 +28,8 @@ func NewSyncService(local, cloud Store, interval time.Duration) *SyncService {
 
 // Start begins the background sync process
 func (s *SyncService) Start() {
-	log.Printf("Starting sync service (interval: %v)", s.interval)
+	logger.Info("sync_service_started", "interval", s.interval)
+	log.Printf("Starting sync service (interval: %v)", s.interval) // Keep for backwards compatibility
 	go s.run()
 }
 
@@ -56,7 +59,9 @@ func (s *SyncService) run() {
 
 // performSync synchronizes entries between local and cloud storage
 func (s *SyncService) performSync() {
-	log.Println("Starting sync...")
+	startTime := time.Now()
+	logger.Info("sync_started")
+	log.Println("Starting sync...") // Keep for backwards compatibility
 
 	// Get all entries from both stores
 	localEntries, err := s.local.GetAll()
@@ -119,7 +124,14 @@ func (s *SyncService) performSync() {
 	}
 
 	s.lastSync = time.Now()
-	log.Printf("Sync complete: %d entries synced, %d conflicts resolved", syncedCount, conflictCount)
+	duration := time.Since(startTime)
+
+	logger.Info("sync_completed",
+		"synced_count", syncedCount,
+		"conflict_count", conflictCount,
+		"duration_ms", duration.Milliseconds())
+
+	log.Printf("Sync complete: %d entries synced, %d conflicts resolved", syncedCount, conflictCount) // Keep for backwards compatibility
 }
 
 // SyncNow triggers an immediate sync
