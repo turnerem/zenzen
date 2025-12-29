@@ -3,13 +3,13 @@ package api
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/turnerem/zenzen/logger"
 	"github.com/turnerem/zenzen/service"
 )
 
@@ -88,15 +88,15 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 		if s.cognito != nil {
 			bearerToken := extractBearerToken(r)
 			if bearerToken != "" {
-				token, err := s.cognito.ValidateToken(bearerToken)
+				_, err := s.cognito.ValidateToken(bearerToken)
 				if err != nil {
-					log.Printf("Cognito token validation failed: %v", err)
+					logger.Warn("cognito_token_validation_failed", "error", err.Error())
 					http.Error(w, "Unauthorized: Invalid token", http.StatusUnauthorized)
 					return
 				}
 
-				// Token is valid - add claims to context if needed
-				log.Printf("Authenticated via Cognito: %v", token.Claims)
+				// Token is valid
+				logger.Info("authenticated", "method", "cognito")
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -109,11 +109,12 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 		}
 
 		if apiKey != s.apiKey {
+			logger.Warn("authentication_failed", "reason", "invalid_api_key")
 			http.Error(w, "Unauthorized: Invalid or missing API key/token", http.StatusUnauthorized)
 			return
 		}
 
-		log.Printf("Authenticated via API key")
+		logger.Info("authenticated", "method", "api_key")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -121,7 +122,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 // Start starts the API server
 func (s *Server) Start(port int) error {
 	addr := fmt.Sprintf(":%d", port)
-	log.Printf("Starting API server on %s", addr)
+	logger.Info("api_server_started", "address", addr)
 	return http.ListenAndServe(addr, s.router)
 }
 

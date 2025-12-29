@@ -2,7 +2,6 @@ package logger
 
 import (
 	"io"
-	"log"
 	"log/slog"
 	"os"
 )
@@ -33,10 +32,6 @@ func SetupLogger(mode string) (*os.File, error) {
 		}))
 		Logger = Logger.With("mode", "tui")
 
-		// Keep old log package working for existing code
-		log.SetOutput(logFile)
-		log.SetPrefix("[TUI] ")
-
 		return logFile, nil
 
 	case "api":
@@ -47,9 +42,6 @@ func SetupLogger(mode string) (*os.File, error) {
 			Level: slog.LevelInfo,
 		}))
 		Logger = Logger.With("mode", "api")
-
-		log.SetOutput(os.Stdout)
-		log.SetPrefix("[API] ")
 
 		return nil, nil
 
@@ -62,9 +54,6 @@ func SetupLogger(mode string) (*os.File, error) {
 		}))
 		Logger = Logger.With("mode", "sync")
 
-		log.SetOutput(os.Stdout)
-		log.SetPrefix("[SYNC] ")
-
 		return nil, nil
 
 	case "setup":
@@ -76,9 +65,6 @@ func SetupLogger(mode string) (*os.File, error) {
 		}))
 		Logger = Logger.With("mode", "setup")
 
-		log.SetOutput(os.Stdout)
-		log.SetPrefix("[SETUP] ")
-
 		return nil, nil
 
 	default:
@@ -89,21 +75,17 @@ func SetupLogger(mode string) (*os.File, error) {
 			Level: slog.LevelInfo,
 		}))
 
-		log.SetOutput(os.Stdout)
-
 		return nil, nil
 	}
 }
 
 // Disable disables all logging (writes to /dev/null)
 func Disable() {
-	log.SetOutput(io.Discard)
 	Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
 // Enable re-enables logging to stdout
 func Enable() {
-	log.SetOutput(os.Stdout)
 	Logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))

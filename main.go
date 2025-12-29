@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/turnerem/zenzen/api"
@@ -22,19 +21,22 @@ func main() {
 		case "setup":
 			logger.SetupLogger("setup")
 			if err := createTestData(); err != nil {
-				log.Fatal("Error creating test data:", err)
+				logger.Error("setup_failed", "error", err.Error())
+				os.Exit(1)
 			}
 			return
 		case "sync-now":
 			logger.SetupLogger("sync")
 			if err := runSyncNow(); err != nil {
-				log.Fatal("Error running sync:", err)
+				logger.Error("sync_command_failed", "error", err.Error())
+				os.Exit(1)
 			}
 			return
 		case "api":
 			logger.SetupLogger("api")
 			if err := runAPIServer(); err != nil {
-				log.Fatal("Error running API server:", err)
+				logger.Error("api_server_failed", "error", err.Error())
+				os.Exit(1)
 			}
 			return
 		}
@@ -58,7 +60,8 @@ func main() {
 	// Load full configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatal("Error loading config: ", err)
+		logger.Error("config_load_failed", "error", err.Error())
+		os.Exit(1)
 	}
 
 	// Get local connection string (with fallback to legacy format)
@@ -67,32 +70,33 @@ func main() {
 		localConnString = cfg.Database.ConnectionString
 	}
 	if localConnString == "" {
-		log.Fatal("No local database connection configured. Set local_connection in config.yaml")
+		logger.Error("no_database_configured", "message", "Set local_connection in config.yaml")
+		os.Exit(1)
 	}
 
 	// Initialize local SQL storage
 	localStore, err := storage.NewSQLStorage(ctx, localConnString)
 	if err != nil {
-		log.Fatalf("Error connecting to local database: %v", err)
+		logger.Error("local_database_connection_failed", "error", err.Error())
+		os.Exit(1)
 	}
 	defer localStore.Close(ctx)
 
 	// Initialize cloud storage and sync service if configured
 	var syncService *service.SyncService
 	if cfg.Sync.Enabled && cfg.Database.CloudConnection != "" {
-		log.Println("Cloud sync enabled, initializing cloud storage...")
+		logger.Info("cloud_sync_enabled", "initializing", "cloud_storage")
 
 		cloudStore, err := storage.NewSQLStorage(ctx, cfg.Database.CloudConnection)
 		if err != nil {
-			log.Printf("Warning: Could not connect to cloud database: %v", err)
-			log.Println("Continuing with local-only mode")
+			logger.Warn("cloud_database_connection_failed", "error", err.Error(), "mode", "local_only")
 		} else {
 			defer cloudStore.Close(ctx)
 
 			// Get sync interval
 			interval, err := cfg.GetSyncInterval()
 			if err != nil {
-				log.Printf("Warning: Invalid sync interval '%s', using default 60s: %v", cfg.Sync.Interval, err)
+				logger.Warn("invalid_sync_interval", "interval", cfg.Sync.Interval, "error", err.Error(), "default", "60s")
 				interval = 60 * 1000000000 // 60 seconds in nanoseconds
 			}
 
@@ -100,8 +104,6 @@ func main() {
 			syncService = service.NewSyncService(localStore, cloudStore, interval)
 			syncService.Start()
 			defer syncService.Stop()
-
-			log.Printf("Sync service started with interval: %v", interval)
 		}
 	}
 
@@ -110,7 +112,8 @@ func main() {
 
 	// Load all notes
 	if err := notes.LoadAll(); err != nil {
-		log.Fatalf("Error loading notes: %v", err)
+		logger.Error("notes_load_failed", "error", err.Error())
+		os.Exit(1)
 	}
 
 	// Create callbacks for TUI
@@ -124,7 +127,8 @@ func main() {
 
 	// Start interactive TUI
 	if err := StartTUI(notes.Entries, saveEntryFn, deleteEntryFn); err != nil {
-		log.Fatalf("Error starting TUI: %v", err)
+		logger.Error("tui_start_failed", "error", err.Error())
+		os.Exit(1)
 	}
 }
 
@@ -140,8 +144,8 @@ func runSyncNow() error {
 
 	// Check if sync is configured
 	if cfg.Database.CloudConnection == "" {
-		log.Println("No cloud database configured. Please set cloud_connection in config.yaml")
-		log.Println("See CLOUD_SETUP.md for instructions")
+		logger.Warn("no_cloud_database_configured", "message", "Please set cloud_connection in config.yaml")
+		logger.Info("see_documentation", "file", "CLOUD_SETUP.md")
 		return nil
 	}
 
@@ -154,16 +158,18 @@ func runSyncNow() error {
 		return fmt.Errorf("no local database connection configured")
 	}
 
-	log.Println("Connecting to local database...")
+	logger.Info("connecting_to_database", "type", "local")
 	localStore, err := storage.NewSQLStorage(ctx, localConnString)
 	if err != nil {
+		logger.Error("local_connection_failed", "error", err.Error())
 		return fmt.Errorf("error connecting to local database: %w", err)
 	}
 	defer localStore.Close(ctx)
 
-	log.Println("Connecting to cloud database...")
+	logger.Info("connecting_to_database", "type", "cloud")
 	cloudStore, err := storage.NewSQLStorage(ctx, cfg.Database.CloudConnection)
 	if err != nil {
+		logger.Error("cloud_connection_failed", "error", err.Error())
 		return fmt.Errorf("error connecting to cloud database: %w", err)
 	}
 	defer cloudStore.Close(ctx)
@@ -172,9 +178,8 @@ func runSyncNow() error {
 	syncService := service.NewSyncService(localStore, cloudStore, 0)
 
 	// Perform sync
-	log.Println("Starting sync...")
 	syncService.SyncNow()
-	log.Println("Sync completed successfully!")
+	logger.Info("manual_sync_completed")
 
 	return nil
 }
@@ -205,11 +210,12 @@ func runAPIServer() error {
 		return fmt.Errorf("no database connection configured")
 	}
 
-	log.Printf("API server will use %s database", dbType)
+	logger.Info("api_database_selected", "type", dbType)
 
 	// Connect to database
 	store, err := storage.NewSQLStorage(ctx, connString)
 	if err != nil {
+		logger.Error("api_database_connection_failed", "error", err.Error())
 		return fmt.Errorf("error connecting to database: %w", err)
 	}
 	defer store.Close(ctx)
@@ -218,7 +224,7 @@ func runAPIServer() error {
 	apiKey := os.Getenv("ZENZEN_API_KEY")
 	if apiKey == "" {
 		apiKey = "dev-key-change-in-production"
-		log.Println("⚠️  WARNING: Using default API key. Set ZENZEN_API_KEY environment variable for production!")
+		logger.Warn("using_default_api_key", "message", "Set ZENZEN_API_KEY environment variable for production")
 	}
 
 	// Get port from environment or use default
@@ -236,25 +242,20 @@ func runAPIServer() error {
 	cognitoClientID := os.Getenv("COGNITO_CLIENT_ID")
 
 	if cognitoRegion != "" && cognitoUserPoolID != "" && cognitoClientID != "" {
-		log.Println("Cognito authentication enabled")
+		logger.Info("cognito_authentication_enabled")
 		cognito, err := api.NewCognitoConfig(cognitoRegion, cognitoUserPoolID, cognitoClientID)
 		if err != nil {
-			log.Printf("⚠️  Warning: Failed to initialize Cognito: %v", err)
-			log.Println("Falling back to API key authentication only")
+			logger.Warn("cognito_init_failed", "error", err.Error(), "fallback", "api_key_only")
 		} else {
 			apiServer.SetCognitoConfig(cognito)
-			log.Printf("✓ Cognito configured: Region=%s, UserPoolID=%s", cognitoRegion, cognitoUserPoolID)
-			log.Println("API accepts both:")
-			log.Println("  - API Key: X-API-Key header")
-			log.Println("  - Cognito: Authorization: Bearer <token>")
+			logger.Info("cognito_configured", "region", cognitoRegion, "user_pool_id", cognitoUserPoolID)
+			logger.Info("api_auth_methods", "methods", "api_key,cognito")
 		}
 	} else {
-		log.Println("Cognito not configured (using API key only)")
-		log.Println("To enable Cognito, set: COGNITO_REGION, COGNITO_USER_POOL_ID, COGNITO_CLIENT_ID")
+		logger.Info("cognito_not_configured", "auth_method", "api_key_only")
 	}
 
-	log.Printf("API Key: %s", apiKey)
-	log.Printf("Example (API Key): curl -H 'X-API-Key: %s' http://localhost:%d/api/v1/entries", apiKey, port)
+	logger.Info("api_server_starting", "port", port, "api_key", apiKey)
 
 	return apiServer.Start(port)
 }

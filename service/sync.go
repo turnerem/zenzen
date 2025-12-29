@@ -1,7 +1,6 @@
 package service
 
 import (
-	"log"
 	"time"
 
 	"github.com/turnerem/zenzen/logger"
@@ -29,14 +28,13 @@ func NewSyncService(local, cloud Store, interval time.Duration) *SyncService {
 // Start begins the background sync process
 func (s *SyncService) Start() {
 	logger.Info("sync_service_started", "interval", s.interval)
-	log.Printf("Starting sync service (interval: %v)", s.interval) // Keep for backwards compatibility
 	go s.run()
 }
 
 // Stop halts the background sync process
 func (s *SyncService) Stop() {
 	close(s.stopChan)
-	log.Println("Sync service stopped")
+	logger.Info("sync_service_stopped")
 }
 
 // run is the main sync loop
@@ -61,18 +59,17 @@ func (s *SyncService) run() {
 func (s *SyncService) performSync() {
 	startTime := time.Now()
 	logger.Info("sync_started")
-	log.Println("Starting sync...") // Keep for backwards compatibility
 
 	// Get all entries from both stores
 	localEntries, err := s.local.GetAll()
 	if err != nil {
-		log.Printf("Error getting local entries: %v", err)
+		logger.Error("sync_get_local_failed", "error", err.Error())
 		return
 	}
 
 	cloudEntries, err := s.cloud.GetAll()
 	if err != nil {
-		log.Printf("Error getting cloud entries: %v", err)
+		logger.Error("sync_get_cloud_failed", "error", err.Error())
 		return
 	}
 
@@ -86,7 +83,7 @@ func (s *SyncService) performSync() {
 		if !existsInCloud {
 			// Entry only exists locally - push to cloud
 			if err := s.cloud.SaveEntry(localEntry); err != nil {
-				log.Printf("Error pushing entry %s to cloud: %v", id, err)
+				logger.Error("sync_push_failed", "entry_id", id, "error", err.Error())
 			} else {
 				syncedCount++
 			}
@@ -95,14 +92,14 @@ func (s *SyncService) performSync() {
 			if localEntry.LastModifiedTimestamp.After(cloudEntry.LastModifiedTimestamp) {
 				// Local is newer - push to cloud
 				if err := s.cloud.SaveEntry(localEntry); err != nil {
-					log.Printf("Error updating entry %s in cloud: %v", id, err)
+					logger.Error("sync_update_cloud_failed", "entry_id", id, "error", err.Error())
 				} else {
 					syncedCount++
 				}
 			} else if cloudEntry.LastModifiedTimestamp.After(localEntry.LastModifiedTimestamp) {
 				// Cloud is newer - pull to local
 				if err := s.local.SaveEntry(cloudEntry); err != nil {
-					log.Printf("Error updating entry %s locally: %v", id, err)
+					logger.Error("sync_update_local_failed", "entry_id", id, "error", err.Error())
 				} else {
 					conflictCount++
 				}
@@ -116,7 +113,7 @@ func (s *SyncService) performSync() {
 		if _, existsLocally := localEntries[id]; !existsLocally {
 			// Entry only exists in cloud - pull to local
 			if err := s.local.SaveEntry(cloudEntry); err != nil {
-				log.Printf("Error pulling entry %s from cloud: %v", id, err)
+				logger.Error("sync_pull_failed", "entry_id", id, "error", err.Error())
 			} else {
 				syncedCount++
 			}
@@ -130,8 +127,6 @@ func (s *SyncService) performSync() {
 		"synced_count", syncedCount,
 		"conflict_count", conflictCount,
 		"duration_ms", duration.Milliseconds())
-
-	log.Printf("Sync complete: %d entries synced, %d conflicts resolved", syncedCount, conflictCount) // Keep for backwards compatibility
 }
 
 // SyncNow triggers an immediate sync

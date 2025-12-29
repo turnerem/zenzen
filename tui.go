@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os/exec"
 	"sort"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/turnerem/zenzen/core"
+	"github.com/turnerem/zenzen/logger"
 )
 
 // SaveEntryFunc is a function that saves a single entry to storage
@@ -192,7 +192,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				m.entries[selectedID] = entry
 				if err := m.saveEntryFn(entry); err != nil {
-					log.Printf("Error saving entry: %v", err)
+					logger.Error("entry_save_failed", "error", err.Error())
 				}
 
 				// Rebuild available tags after save
@@ -314,7 +314,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.orderedIDs = append(m.orderedIDs[:m.selectedIndex], m.orderedIDs[m.selectedIndex+1:]...)
 			// Delete from storage
 			if err := m.deleteEntryFn(selectedID); err != nil {
-				log.Printf("Error deleting entry: %v", err)
+				logger.Error("entry_delete_failed", "error", err.Error())
 			}
 			// Adjust selectedIndex if needed
 			if m.selectedIndex >= len(m.orderedIDs) && m.selectedIndex > 0 {
