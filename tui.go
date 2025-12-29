@@ -29,10 +29,11 @@ type Model struct {
 	deleteEntryFn     DeleteEntryFunc
 	selectedIndex     int // Index in OrderedIDs
 	view              string // "list", "detail", or "edit"
+	titleInput        textinput.Model
 	tagsInput         textinput.Model
 	estimatedInput    textinput.Model
 	bodyTextarea      textarea.Model
-	focusIndex        int      // 0=tags, 1=estimated, 2=body
+	focusIndex        int      // 0=title, 1=tags, 2=estimated, 3=body
 	availableTags     []string // All unique tags from all entries
 	tagSuggestions    []string // Filtered suggestions based on input
 	selectedSuggest   int      // Index of selected suggestion
@@ -44,6 +45,11 @@ type Model struct {
 
 // NewModel creates a new TUI model
 func NewModel(entries map[string]core.Entry, saveEntryFn SaveEntryFunc, deleteEntryFn DeleteEntryFunc) *Model {
+	// Initialize title input
+	titleInput := textinput.New()
+	titleInput.Placeholder = "Entry Title"
+	titleInput.CharLimit = 100
+
 	// Initialize tags input
 	tagsInput := textinput.New()
 	tagsInput.Placeholder = "tag1, tag2, tag3"
@@ -100,6 +106,7 @@ func NewModel(entries map[string]core.Entry, saveEntryFn SaveEntryFunc, deleteEn
 		deleteEntryFn:     deleteEntryFn,
 		selectedIndex:     0,
 		view:              "list",
+		titleInput:        titleInput,
 		tagsInput:         tagsInput,
 		estimatedInput:    estimatedInput,
 		bodyTextarea:      bodyTextarea,
@@ -128,7 +135,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
 			// Handle tag suggestions navigation when shown
-			if m.focusIndex == 0 && m.showTagSuggestions && len(m.tagSuggestions) > 0 {
+			if m.focusIndex == 1 && m.showTagSuggestions && len(m.tagSuggestions) > 0 {
 				switch msg.String() {
 				case "down":
 					if m.selectedSuggest < len(m.tagSuggestions)-1 {
@@ -169,6 +176,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				selectedID := m.orderedIDs[m.selectedIndex]
 				entry := m.entries[selectedID]
 
+				// Save title
+				entry.Title = m.titleInput.Value()
+				if entry.Title == "" {
+					entry.Title = "Untitled"
+				}
+
 				// Parse tags from comma-separated input
 				tagsStr := m.tagsInput.Value()
 				if tagsStr != "" {
@@ -203,19 +216,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "tab":
 				// Cycle through inputs
-				m.focusIndex = (m.focusIndex + 1) % 3
+				m.focusIndex = (m.focusIndex + 1) % 4
 				if m.focusIndex == 0 {
+					m.titleInput.Focus()
+					m.tagsInput.Blur()
+					m.estimatedInput.Blur()
+					m.bodyTextarea.Blur()
+					m.showTagSuggestions = false
+				} else if m.focusIndex == 1 {
+					m.titleInput.Blur()
 					m.tagsInput.Focus()
 					m.estimatedInput.Blur()
 					m.bodyTextarea.Blur()
-					// Update suggestions when returning to tags field
+					// Update suggestions when entering tags field
 					m.updateTagSuggestions()
-				} else if m.focusIndex == 1 {
+				} else if m.focusIndex == 2 {
+					m.titleInput.Blur()
 					m.tagsInput.Blur()
 					m.estimatedInput.Focus()
 					m.bodyTextarea.Blur()
 					m.showTagSuggestions = false
 				} else {
+					m.titleInput.Blur()
 					m.tagsInput.Blur()
 					m.estimatedInput.Blur()
 					m.bodyTextarea.Focus()
@@ -227,6 +249,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Update the focused input
 		if m.focusIndex == 0 {
+			m.titleInput, cmd = m.titleInput.Update(msg)
+		} else if m.focusIndex == 1 {
 			oldVal := m.tagsInput.Value()
 			m.tagsInput, cmd = m.tagsInput.Update(msg)
 			newVal := m.tagsInput.Value()
@@ -235,7 +259,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if oldVal != newVal {
 				m.updateTagSuggestions()
 			}
-		} else if m.focusIndex == 1 {
+		} else if m.focusIndex == 2 {
 			oldVal := m.estimatedInput.Value()
 			m.estimatedInput, cmd = m.estimatedInput.Update(msg)
 			newVal := m.estimatedInput.Value()
@@ -282,6 +306,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			selectedID := m.orderedIDs[m.selectedIndex]
 			entry := m.entries[selectedID]
 
+			// Load title
+			m.titleInput.SetValue(entry.Title)
+
 			// Load tags
 			m.tagsInput.SetValue(strings.Join(entry.Tags, ", "))
 
@@ -295,9 +322,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Load body
 			m.bodyTextarea.SetValue(entry.Body)
 
-			// Focus on tags first
+			// Focus on title first
 			m.focusIndex = 0
-			m.tagsInput.Focus()
+			m.titleInput.Focus()
+			m.tagsInput.Blur()
 			m.estimatedInput.Blur()
 			m.bodyTextarea.Blur()
 
@@ -326,17 +354,51 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.view = "list"
 		}
 	case "n":
-		// TODO: Create new log
+		if m.view == "list" {
+			// Create new entry
+			newID := fmt.Sprintf("%d", time.Now().UnixNano())
+			newEntry := core.Entry{
+				ID:                    newID,
+				Title:                 "New Log Entry",
+				Tags:                  []string{},
+				StartedAtTimestamp:    time.Now(),
+				EndedAtTimestamp:      time.Time{}, // Zero value = in progress
+				LastModifiedTimestamp: time.Now(),
+				EstimatedDuration:     0,
+				Body:                  "",
+			}
+
+			// Add to entries map
+			m.entries[newID] = newEntry
+
+			// Add to ordered list at the beginning (most recent)
+			m.orderedIDs = append([]string{newID}, m.orderedIDs...)
+
+			// Save to storage
+			if err := m.saveEntryFn(newEntry); err != nil {
+				logger.Error("entry_create_failed", "error", err.Error())
+			}
+
+			// Select the new entry and switch to edit mode
+			m.selectedIndex = 0
+			m.titleInput.SetValue("New Log Entry")
+			m.tagsInput.SetValue("")
+			m.estimatedInput.SetValue("")
+			m.bodyTextarea.SetValue("")
+			m.focusIndex = 0
+			m.titleInput.Focus()
+			m.tagsInput.Blur()
+			m.estimatedInput.Blur()
+			m.bodyTextarea.Blur()
+			m.updateTagSuggestions()
+			m.view = "edit"
+		}
 	}
 	return m, nil
 }
 
 // View renders the UI
 func (m Model) View() string {
-	if len(m.entries) == 0 {
-		return "No logs found. Run 'go run . setup' to create test data.\n\nPress 'q' to quit.\n"
-	}
-
 	switch m.view {
 	case "list":
 		return m.renderListView()
@@ -383,24 +445,33 @@ func (m Model) renderListView() string {
 
 	// List items
 	var listItems []string
-	for i, id := range m.orderedIDs {
-		log := m.entries[id]
-		selected := i == m.selectedIndex
+	if len(m.orderedIDs) == 0 {
+		// Show empty state message
+		emptyMsg := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("8")).
+			Italic(true).
+			Render("No logs yet. Press 'n' to create your first log entry.")
+		listItems = append(listItems, emptyMsg)
+	} else {
+		for i, id := range m.orderedIDs {
+			log := m.entries[id]
+			selected := i == m.selectedIndex
 
-		var line string
-		if selected {
-			// Highlight selected item
-			line = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("11")).
-				Bold(true).
-				Background(lipgloss.Color("4")).
-				Padding(0, 1).
-				Render(fmt.Sprintf("▶ %s", log.Title))
-		} else {
-			// Normal item
-			line = fmt.Sprintf("  %s", log.Title)
+			var line string
+			if selected {
+				// Highlight selected item
+				line = lipgloss.NewStyle().
+					Foreground(lipgloss.Color("11")).
+					Bold(true).
+					Background(lipgloss.Color("4")).
+					Padding(0, 1).
+					Render(fmt.Sprintf("▶ %s", log.Title))
+			} else {
+				// Normal item
+				line = fmt.Sprintf("  %s", log.Title)
+			}
+			listItems = append(listItems, line)
 		}
-		listItems = append(listItems, line)
 	}
 
 	// Footer help
@@ -480,16 +551,8 @@ func (m Model) renderEditView() string {
 	log := m.entries[selectedID]
 	var content []string
 
-	// Display metadata (read-only)
-	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("4")).
-		Bold(true)
-
 	labelStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("8"))
-
-	content = append(content, titleStyle.Render("editing: "+log.Title))
-	content = append(content, "")
 
 	// Timestamps at the top (read-only)
 	timestampStyle := lipgloss.NewStyle().
@@ -514,6 +577,10 @@ func (m Model) renderEditView() string {
 	content = append(content, "")
 
 	// Editable fields
+	content = append(content, labelStyle.Render("title:"))
+	content = append(content, m.titleInput.View())
+	content = append(content, "")
+
 	content = append(content, labelStyle.Render("tags:"))
 	content = append(content, m.tagsInput.View())
 
@@ -554,7 +621,7 @@ func (m Model) renderEditView() string {
 	if m.showTagSuggestions && len(m.tagSuggestions) > 0 {
 		footerText = "↑/↓ select tag | enter apply | tab switch field | esc save & exit"
 	} else {
-		footerText = "tab switch field | esc save & exit | ctrl+c quit without saving"
+		footerText = "tab: title→tags→estimated→body | esc save & exit | ctrl+c quit"
 	}
 	footer := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("8")).
