@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -14,7 +15,7 @@ func TestSQLStorage_GetAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create mock: %v", err)
 	}
-	defer mock.Close(nil)
+	defer mock.Close(context.TODO())
 
 	storage := &SQLStorage{
 		conn: mock,
@@ -55,7 +56,7 @@ func TestSQLStorage_SaveEntry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create mock: %v", err)
 	}
-	defer mock.Close(nil)
+	defer mock.Close(context.TODO())
 
 	storage := &SQLStorage{
 		conn: mock,
@@ -92,7 +93,7 @@ func TestSQLStorage_DeleteEntry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create mock: %v", err)
 	}
-	defer mock.Close(nil)
+	defer mock.Close(context.TODO())
 
 	storage := &SQLStorage{
 		conn: mock,

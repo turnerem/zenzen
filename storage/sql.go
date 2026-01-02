@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	TABLE_NAME = "entries"
+	ENTRIES_TABLE = "entries"
 )
 
 // DBConn is an interface for database connections (allows mocking)
@@ -78,7 +78,7 @@ func (s *SQLStorage) GetAll() (map[string]core.Entry, error) {
 
 	query, args, err := s.psql.
 		Select("id", "title", "tags", "started_at_timestamp", "ended_at_timestamp", "last_modified_timestamp", "estimated_duration", "body").
-		From(TABLE_NAME).
+		From(ENTRIES_TABLE).
 		ToSql()
 
 	if err != nil {
@@ -141,7 +141,7 @@ func (s *SQLStorage) SaveEntry(entry core.Entry) error {
 	ctx := context.Background()
 
 	query, args, err := s.psql.
-		Insert(TABLE_NAME).
+		Insert(ENTRIES_TABLE).
 		Columns("id", "title", "tags", "started_at_timestamp", "ended_at_timestamp", "last_modified_timestamp", "estimated_duration", "body").
 		Values(
 			entry.ID,
@@ -173,7 +173,7 @@ func (s *SQLStorage) DeleteEntry(id string) error {
 	ctx := context.Background()
 
 	query, args, err := s.psql.
-		Delete(TABLE_NAME).
+		Delete(ENTRIES_TABLE).
 		Where(sq.Eq{"id": id}).
 		ToSql()
 
