@@ -29,7 +29,7 @@ func NewNotes(store Store) *Notes {
 }
 
 func (l *Notes) LoadAll() error {
-	// read in all logs and store in l.logs
+	// read in all logs and store in l.Entries
 	logs, err := l.store.GetAll()
 	if err != nil {
 		return err

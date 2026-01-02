@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/turnerem/zenzen/api"
 	"github.com/turnerem/zenzen/config"
@@ -87,7 +88,11 @@ func main() {
 	if cfg.Sync.Enabled && cfg.Database.CloudConnection != "" {
 		logger.Info("cloud_sync_enabled", "initializing", "cloud_storage")
 
-		cloudStore, err := storage.NewSQLStorage(ctx, cfg.Database.CloudConnection)
+		// Use a timeout context for cloud connection to fail fast if unreachable
+		cloudCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		cloudStore, err := storage.NewSQLStorage(cloudCtx, cfg.Database.CloudConnection)
 		if err != nil {
 			logger.Warn("cloud_database_connection_failed", "error", err.Error(), "mode", "local_only")
 		} else {
