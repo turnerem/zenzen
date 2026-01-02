@@ -724,9 +724,9 @@ func (m Model) renderFilterSortSection() []string {
 		sortDirection = "↑ oldest"
 	}
 	sortFieldDisplay := map[string]string{
-		"started_at":      "Started",
-		"ended_at":        "Ended",
-		"last_modified":   "Modified",
+		"started_at":    "Started",
+		"ended_at":      "Ended",
+		"last_modified": "Modified",
 	}[m.sortBy]
 
 	sortLine := labelStyle.Render("Sort: ") +
@@ -969,50 +969,64 @@ func (m Model) renderDetailView() string {
 	return m.applyBorder(content)
 }
 
-// renderEditView renders the edit view with metadata and textarea
-func (m Model) renderEditView() string {
-	if len(m.orderedIDs) == 0 || m.selectedIndex >= len(m.orderedIDs) {
-		return "Error: No log selected\n"
+// renderMetadataSection renders the left metadata section (timestamps, title, tags, estimated)
+func (m Model) renderMetadataSection() []string {
+	displayIDs := m.getFilteredAndSortedIDs()
+	if len(displayIDs) == 0 || m.selectedIndex >= len(displayIDs) {
+		return []string{"Error: No entry selected"}
 	}
 
-	selectedID := m.orderedIDs[m.selectedIndex]
+	selectedID := displayIDs[m.selectedIndex]
 	log := m.entries[selectedID]
-	var content []string
 
 	labelStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("8"))
 
-	// Timestamps at the top (read-only)
 	timestampStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("8"))
 
+	var lines []string
+
+	// Timestamps (read-only) - always show, even if not set
 	if !log.StartedAtTimestamp.IsZero() {
-		content = append(content, timestampStyle.Render(fmt.Sprintf("%s: %s",
+		lines = append(lines, timestampStyle.Render(fmt.Sprintf("%s: %s",
 			core.FieldDisplayNames["StartedAtTimestamp"],
 			log.StartedAtTimestamp.Format("2006-01-02 15:04"))))
+	} else {
+		lines = append(lines, timestampStyle.Render(fmt.Sprintf("%s: (not set)",
+			core.FieldDisplayNames["StartedAtTimestamp"])))
 	}
+
 	if !log.EndedAtTimestamp.IsZero() {
-		content = append(content, timestampStyle.Render(fmt.Sprintf("%s: %s",
+		lines = append(lines, timestampStyle.Render(fmt.Sprintf("%s: %s",
 			core.FieldDisplayNames["EndedAtTimestamp"],
 			log.EndedAtTimestamp.Format("2006-01-02 15:04"))))
+	} else {
+		lines = append(lines, timestampStyle.Render(fmt.Sprintf("%s: (not set)",
+			core.FieldDisplayNames["EndedAtTimestamp"])))
 	}
+
 	if !log.LastModifiedTimestamp.IsZero() {
-		content = append(content, timestampStyle.Render(fmt.Sprintf("%s: %s",
+		lines = append(lines, timestampStyle.Render(fmt.Sprintf("%s: %s",
 			core.FieldDisplayNames["LastModifiedTimestamp"],
 			log.LastModifiedTimestamp.Format("2006-01-02 15:04"))))
+	} else {
+		lines = append(lines, timestampStyle.Render(fmt.Sprintf("%s: (not set)",
+			core.FieldDisplayNames["LastModifiedTimestamp"])))
 	}
 
-	content = append(content, "")
+	lines = append(lines, "")
 
-	// Editable fields
-	content = append(content, labelStyle.Render("title:"))
-	content = append(content, m.titleInput.View())
-	content = append(content, "")
+	// Title
+	lines = append(lines, labelStyle.Render("title:"))
+	lines = append(lines, m.titleInput.View())
+	lines = append(lines, "")
 
-	content = append(content, labelStyle.Render("tags:"))
-	content = append(content, m.tagsInput.View())
+	// Tags
+	lines = append(lines, labelStyle.Render("tags:"))
+	lines = append(lines, m.tagsInput.View())
 
-	// Show tag suggestions if available
+	// Tag suggestions
 	if m.showTagSuggestions && len(m.tagSuggestions) > 0 {
 		suggestionStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("7")).
@@ -1023,26 +1037,124 @@ func (m Model) renderEditView() string {
 			Background(lipgloss.Color("6"))
 
 		for i, suggestion := range m.tagSuggestions {
-			if i >= 5 { // Limit to 5 suggestions
+			if i >= 5 {
 				break
 			}
 			if i == m.selectedSuggest {
-				content = append(content, selectedStyle.Render("  > "+suggestion))
+				lines = append(lines, selectedStyle.Render("  > "+suggestion))
 			} else {
-				content = append(content, suggestionStyle.Render("    "+suggestion))
+				lines = append(lines, suggestionStyle.Render("    "+suggestion))
 			}
 		}
 	}
 
-	content = append(content, "")
+	lines = append(lines, "")
 
-	content = append(content, labelStyle.Render("estimated:"))
-	content = append(content, m.estimatedInput.View())
-	content = append(content, "")
+	// Estimated duration
+	lines = append(lines, labelStyle.Render("estimated:"))
+	lines = append(lines, m.estimatedInput.View())
 
-	content = append(content, labelStyle.Render("body:"))
-	content = append(content, m.bodyTextarea.View())
-	content = append(content, "")
+	return lines
+}
+
+// layoutEditView arranges the edit view with two columns: left (metadata) and right (body)
+func (m Model) layoutEditView() string {
+	borderStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#32a852"))
+
+	// Build borders
+	label := "<< ZENZEN >>"
+	slashesNeeded := m.width - len(label)
+	if slashesNeeded < 0 {
+		slashesNeeded = 0
+	}
+	leftSlashes := slashesNeeded / 5
+	rightSlashes := slashesNeeded - leftSlashes
+	topBorder := strings.Repeat("/", leftSlashes) + label + strings.Repeat("/", rightSlashes)
+	bottomBorder := strings.Repeat("/", m.width)
+
+	// Get metadata (left column)
+	metadataLines := m.renderMetadataSection()
+
+	// Calculate widths: metadata gets what it needs, body gets the rest
+	// Find the longest line in metadata to determine left column width
+	maxMetadataWidth := 0
+	for _, line := range metadataLines {
+		// Strip ANSI codes to get actual width
+		width := lipgloss.Width(line)
+		if width > maxMetadataWidth {
+			maxMetadataWidth = width
+		}
+	}
+
+	// Add some padding
+	leftWidth := maxMetadataWidth + 4
+	if leftWidth > m.width/2 {
+		leftWidth = m.width / 2
+	}
+	rightWidth := m.width - leftWidth - 2 // -2 for spacing
+
+	// Body (right column) - create bordered box
+	bodyLabel := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("8")).
+		Render("body:")
+
+	// Calculate body box dimensions (accounting for border)
+	bodyBoxWidth := rightWidth
+	bodyBoxHeight := m.height - 6
+
+	// Set textarea dimensions (inside the border)
+	m.bodyTextarea.SetWidth(bodyBoxWidth - 4)   // -4 for border + padding
+	m.bodyTextarea.SetHeight(bodyBoxHeight - 3) // -3 for border + label
+
+	// Create body content with label and textarea
+	bodyContent := bodyLabel + "\n" + m.bodyTextarea.View()
+
+	// Apply rounded border to body
+	bodyBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#32a852")).
+		Padding(0, 1).
+		Width(bodyBoxWidth - 2).
+		Height(bodyBoxHeight).
+		Render(bodyContent)
+
+	// Split the bordered box into lines
+	bodyBoxLines := strings.Split(bodyBox, "\n")
+
+	// Calculate available height
+	availableHeight := m.height - 4 // top, bottom, footer, empty line
+
+	// Build two-column layout
+	maxLines := availableHeight
+	var result []string
+	result = append(result, borderStyle.Render(topBorder))
+
+	// Render lines side by side
+	for i := 0; i < maxLines; i++ {
+		var leftLine, rightLine string
+
+		if i < len(metadataLines) {
+			leftLine = metadataLines[i]
+		} else {
+			leftLine = ""
+		}
+
+		if i < len(bodyBoxLines) {
+			rightLine = bodyBoxLines[i]
+		} else {
+			rightLine = ""
+		}
+
+		// Pad left to fixed width
+		leftPadded := lipgloss.NewStyle().
+			Width(leftWidth).
+			Render(leftLine)
+
+		// Combine (no separator, just spacing)
+		combined := leftPadded + rightLine
+		result = append(result, combined)
+	}
 
 	// Footer
 	var footerText string
@@ -1055,9 +1167,16 @@ func (m Model) renderEditView() string {
 		Foreground(lipgloss.Color("8")).
 		Render(footerText)
 
-	content = append(content, footer)
+	result = append(result, "")
+	result = append(result, footer)
+	result = append(result, borderStyle.Render(bottomBorder))
 
-	return m.applyBorder(content)
+	return strings.Join(result, "\n")
+}
+
+// renderEditView renders the edit view with metadata and textarea
+func (m Model) renderEditView() string {
+	return m.layoutEditView()
 }
 
 // StartTUI starts the interactive TUI
