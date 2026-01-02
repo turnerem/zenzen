@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"sort"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/turnerem/zenzen/core"
 	"github.com/turnerem/zenzen/logger"
+	"golang.org/x/term"
 )
 
 // SaveEntryFunc is a function that saves a single entry to storage
@@ -23,28 +25,28 @@ type DeleteEntryFunc func(id string) error
 
 // Model represents the TUI state
 type Model struct {
-	entries           map[string]core.Entry
-	orderedIDs        []string
-	saveEntryFn       SaveEntryFunc
-	deleteEntryFn     DeleteEntryFunc
-	selectedIndex     int // Index in OrderedIDs
-	view              string // "list", "detail", or "edit"
-	titleInput        textinput.Model
-	tagsInput         textinput.Model
-	estimatedInput    textinput.Model
-	bodyTextarea      textarea.Model
-	focusIndex        int      // 0=title, 1=tags, 2=estimated, 3=body
-	availableTags     []string // All unique tags from all entries
-	tagSuggestions    []string // Filtered suggestions based on input
-	selectedSuggest   int      // Index of selected suggestion
-	showTagSuggestions bool    // Whether to show tag suggestions
-	renderer          *UIRenderer
-	width             int
-	height            int
+	entries            map[string]core.Entry
+	orderedIDs         []string
+	saveEntryFn        SaveEntryFunc
+	deleteEntryFn      DeleteEntryFunc
+	selectedIndex      int    // Index in OrderedIDs
+	view               string // "list", "detail", or "edit"
+	titleInput         textinput.Model
+	tagsInput          textinput.Model
+	estimatedInput     textinput.Model
+	bodyTextarea       textarea.Model
+	focusIndex         int      // 0=title, 1=tags, 2=estimated, 3=body
+	availableTags      []string // All unique tags from all entries
+	tagSuggestions     []string // Filtered suggestions based on input
+	selectedSuggest    int      // Index of selected suggestion
+	showTagSuggestions bool     // Whether to show tag suggestions
+	renderer           *UIRenderer
+	width              int
+	height             int
 }
 
 // NewModel creates a new TUI model
-func NewModel(entries map[string]core.Entry, saveEntryFn SaveEntryFunc, deleteEntryFn DeleteEntryFunc) *Model {
+func NewModel(entries map[string]core.Entry, saveEntryFn SaveEntryFunc, deleteEntryFn DeleteEntryFunc, width, height int) *Model {
 	// Initialize title input
 	titleInput := textinput.New()
 	titleInput.Placeholder = "Entry Title"
@@ -100,24 +102,24 @@ func NewModel(entries map[string]core.Entry, saveEntryFn SaveEntryFunc, deleteEn
 	}
 
 	return &Model{
-		entries:           entries,
-		orderedIDs:        orderedIDs,
-		saveEntryFn:       saveEntryFn,
-		deleteEntryFn:     deleteEntryFn,
-		selectedIndex:     0,
-		view:              "list",
-		titleInput:        titleInput,
-		tagsInput:         tagsInput,
-		estimatedInput:    estimatedInput,
-		bodyTextarea:      bodyTextarea,
-		focusIndex:        0,
-		availableTags:     availableTags,
-		tagSuggestions:    []string{},
-		selectedSuggest:   0,
+		entries:            entries,
+		orderedIDs:         orderedIDs,
+		saveEntryFn:        saveEntryFn,
+		deleteEntryFn:      deleteEntryFn,
+		selectedIndex:      0,
+		view:               "list",
+		titleInput:         titleInput,
+		tagsInput:          tagsInput,
+		estimatedInput:     estimatedInput,
+		bodyTextarea:       bodyTextarea,
+		focusIndex:         0,
+		availableTags:      availableTags,
+		tagSuggestions:     []string{},
+		selectedSuggest:    0,
 		showTagSuggestions: false,
-		renderer:          NewUIRenderer(NewMinimalUI()),
-		width:             80,
-		height:            24,
+		renderer:           NewUIRenderer(NewMinimalUI()),
+		width:              width,
+		height:             height,
 	}
 }
 
@@ -427,6 +429,7 @@ func (m Model) applyBorder(content []string) string {
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#FF1493")).
+		// BorderForeground(lipgloss.Color("#32a852")).
 		Padding(1, 1).
 		Width(m.width - 4).
 		Height(m.height - 2).
@@ -634,10 +637,18 @@ func (m Model) renderEditView() string {
 
 // StartTUI starts the interactive TUI
 func StartTUI(entries map[string]core.Entry, saveEntryFn SaveEntryFunc, deleteEntryFn DeleteEntryFunc) error {
-	model := NewModel(entries, saveEntryFn, deleteEntryFn)
+	// Get initial terminal size
+	width, height, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		// Fallback to default values if we can't get terminal size
+		width = 80
+		height = 24
+	}
+
+	model := NewModel(entries, saveEntryFn, deleteEntryFn, width, height)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
-	_, err := p.Run()
+	_, err = p.Run()
 	return err
 }
 

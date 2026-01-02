@@ -42,10 +42,6 @@ func (l *Entry) EstimationBias() (time.Duration, error) {
 	return l.EstimatedDuration - actualDuration, nil
 }
 
-// func (d *Duration) Print() {
-// 	dur :=
-// }
-
 func (l *Entry) SetDuration(weeks, days, hours time.Duration) {
 	l.EstimatedDuration = weeks*WEEK + days*DAY + hours*time.Hour
 }

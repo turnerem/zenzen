@@ -1,8 +1,8 @@
-# ZenZen
+# zenzen
 
-> A terminal-based work log for tracking achievements and time estimations
+> A terminal-based diary for tracking work and achievements
 
-Track your work, log your achievements, and build awareness of your estimation accuracy over time. ZenZen helps you understand your optimism bias by comparing estimated vs actual time to completion.
+Track your work, log your achievements, and build awareness of your estimation accuracy over time. zenzen helps you understand your optimism bias by comparing estimated vs actual time to completion.
 
 Perfect for justifying your value to employers with a detailed log of completed work.
 
@@ -45,7 +45,9 @@ Logs are written to `zenzen.log` to keep the display clean. View logs with:
 tail -f zenzen.log
 ```
 
-See [QUICK_START.md](QUICK_START.md) for detailed setup instructions.
+
+
+See [QUICK_START.md](docs/QUICK_START.md) for detailed setup instructions.
 
 ## Architecture
 
@@ -86,7 +88,7 @@ See [QUICK_START.md](QUICK_START.md) for detailed setup instructions.
 - **Database**: PostgreSQL (pgx driver)
 - **API**: Chi router
 - **Auth**: API keys + AWS Cognito (optional)
-- **Cloud**: Neon / AWS RDS
+- **Cloud**: AWS RDS
 
 ## Usage Modes
 
@@ -197,7 +199,7 @@ curl -H "X-API-Key: your-key" http://localhost:8080/api/v1/entries
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/entries
 ```
 
-See [API.md](API.md) for full documentation.
+See [API.md](docs/API.md) for full documentation.
 
 ## Cloud Deployment
 
@@ -208,13 +210,13 @@ See [API.md](API.md) for full documentation.
 3. Copy connection string
 4. Update `config.yaml`
 
-See [CLOUD_SETUP.md](CLOUD_SETUP.md) for details.
+See [CLOUD_SETUP.md](docs/CLOUD_SETUP.md) for details.
 
 ### AWS RDS
 
 Free tier for 12 months, then ~$15/month.
 
-See [CLOUD_SETUP.md](CLOUD_SETUP.md) for setup guide.
+See [CLOUD_SETUP.md](docs/CLOUD_SETUP.md) for setup guide.
 
 ## Authentication
 
@@ -242,7 +244,7 @@ go run . api
 
 Best for: Multi-user apps, learning industry standards
 
-See [COGNITO_SETUP.md](COGNITO_SETUP.md) for setup guide.
+See [COGNITO_SETUP.md](docs/COGNITO_SETUP.md) for setup guide.
 
 ## Development
 
@@ -304,22 +306,25 @@ zenzen/
 ├── ui_minimal.go           # UI rendering
 ├── config.yaml             # Your config (gitignored)
 ├── config.example.yaml     # Config template
-├── API.md                  # API documentation
-├── ARCHITECTURE.md         # Architecture guide
-├── CLOUD_SETUP.md          # Cloud database guide
-├── COGNITO_SETUP.md        # Cognito auth guide
-├── QUICK_START.md          # Getting started guide
+├── docs/                   # Documentation
+│   ├── API.md              # API documentation
+│   ├── ARCHITECTURE.md     # Architecture guide
+│   ├── CLOUD_SETUP.md      # Cloud database guide
+│   ├── COGNITO_SETUP.md    # Cognito auth guide
+│   ├── QUICK_START.md      # Getting started guide
+│   ├── LOGGING.md          # Logging guide
+│   └── CLAUDE.md           # Development guide
 └── test-api.sh             # API test script
 ```
 
 ## Documentation
 
-- **[QUICK_START.md](QUICK_START.md)** - Fast setup guide
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Architecture and design patterns
-- **[API.md](API.md)** - REST API reference
-- **[LOGGING.md](LOGGING.md)** - Structured logging and monitoring
-- **[CLOUD_SETUP.md](CLOUD_SETUP.md)** - Cloud database setup
-- **[COGNITO_SETUP.md](COGNITO_SETUP.md)** - AWS Cognito authentication
+- **[QUICK_START.md](docs/QUICK_START.md)** - Fast setup guide
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Architecture and design patterns
+- **[API.md](docs/API.md)** - REST API reference
+- **[LOGGING.md](docs/LOGGING.md)** - Structured logging and monitoring
+- **[CLOUD_SETUP.md](docs/CLOUD_SETUP.md)** - Cloud database setup
+- **[COGNITO_SETUP.md](docs/COGNITO_SETUP.md)** - AWS Cognito authentication
 
 ## Roadmap
 
@@ -341,19 +346,11 @@ zenzen/
 
 ## Philosophy
 
-ZenZen helps you:
+zenzen helps you:
 
 1. **Track achievements** - Build a portfolio of completed work
 2. **Understand estimation bias** - Compare estimated vs actual time
 3. **Improve over time** - Learn from patterns in your estimates
 4. **Justify your value** - Concrete evidence of work completed
 
-The name "ZenZen" (全然) means "not at all" or "completely" in Japanese - a reminder that estimation is an art, not a science.
-
-## License
-
-MIT
-
-## Author
-
-Built with Go, Bubble Tea, and probably more optimism than necessary about how long it would take.
+The name "zenzen" (全然) means "not at all" or "completely" in Japanese - a reminder that estimation is an art, not a science.
