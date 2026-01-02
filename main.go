@@ -89,7 +89,7 @@ func main() {
 		logger.Info("cloud_sync_enabled", "initializing", "cloud_storage")
 
 		// Use a timeout context for cloud connection to fail fast if unreachable
-		cloudCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		cloudCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
 		defer cancel()
 
 		cloudStore, err := storage.NewSQLStorage(cloudCtx, cfg.Database.CloudConnection)

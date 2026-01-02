@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"sort"
 	"strings"
 	"time"
@@ -412,18 +411,8 @@ func (m Model) View() string {
 	return ""
 }
 
-// generateFigletHeader generates a large ASCII art header using figlet
-func generateFigletHeader(text string) string {
-	cmd := exec.Command("figlet", "-f", "slant", text)
-	output, err := cmd.Output()
-	if err != nil {
-		// Fallback if figlet fails
-		return text
-	}
-	return string(output)
-}
-
-// applyBorder applies a bright pink rounded border to content
+// applyBorder applies a rounded border to content
+// Preserved for future use in bordered subspaces
 func (m Model) applyBorder(content []string) string {
 	innerContent := lipgloss.JoinVertical(lipgloss.Left, content...)
 	return lipgloss.NewStyle().
@@ -436,17 +425,67 @@ func (m Model) applyBorder(content []string) string {
 		Render(innerContent)
 }
 
+// layoutListView arranges all visual elements vertically:
+// top border, list content, spacer, navigation instructions, bottom border
+func (m Model) layoutListView(listItems []string, helpText string) string {
+	borderStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#32a852"))
+
+	// Build top border
+	label := "<< ZENZEN >>"
+	slashesNeeded := m.width - len(label)
+	if slashesNeeded < 0 {
+		slashesNeeded = 0
+	}
+	leftSlashes := slashesNeeded / 5
+	rightSlashes := slashesNeeded - leftSlashes
+	topBorder := strings.Repeat("/", leftSlashes) + label + strings.Repeat("/", rightSlashes)
+
+	// Build bottom border
+	bottomBorder := strings.Repeat("/", m.width)
+
+	// Calculate available space for list items
+	// Layout: top border (1) + items + spacer + empty line (1) + help (1) + bottom border (1)
+	reservedLines := 4 // top, empty before help, help, bottom
+	availableForItems := m.height - reservedLines
+	if availableForItems < 0 {
+		availableForItems = 0
+	}
+
+	// Limit visible items
+	visibleItems := listItems
+	if len(listItems) > availableForItems {
+		visibleItems = listItems[:availableForItems]
+	}
+
+	// Calculate spacer to push help and bottom border down
+	usedLines := 1 + len(visibleItems) + 1 + 1 + 1 // top + items + empty + help + bottom
+	spacerLines := m.height - usedLines
+	if spacerLines < 0 {
+		spacerLines = 0
+	}
+
+	// Build final layout
+	var result []string
+	result = append(result, borderStyle.Render(topBorder))
+	result = append(result, visibleItems...)
+
+	// Add spacer
+	for i := 0; i < spacerLines; i++ {
+		result = append(result, "")
+	}
+
+	// Add help text (2 lines above bottom: empty line + help line)
+	result = append(result, "")
+	result = append(result, helpText)
+	result = append(result, borderStyle.Render(bottomBorder))
+
+	return strings.Join(result, "\n")
+}
+
 // renderListView renders the list of logs
 func (m Model) renderListView() string {
-	headerText := generateFigletHeader("LOGS")
-	headerText = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("4")).
-		Render(headerText)
-	// TODO: center the header horizontally?
-	// headerText = lipgloss.Place(m.width-4, lipgloss.Height(headerText), lipgloss.Center, lipgloss.Top, headerText)
-	headerLines := strings.Split(headerText, "\n")
-
-	// List items
+	// Build list items
 	var listItems []string
 	if len(m.orderedIDs) == 0 {
 		// Show empty state message
@@ -477,28 +516,13 @@ func (m Model) renderListView() string {
 		}
 	}
 
-	// Footer help
+	// Build help text
 	help := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("8")).
 		Render("↑/↓ (j/k) navigate | enter edit | d delete | n new | q quit")
 
-	// Build content with header and items
-	var content []string
-	content = append(content, headerLines...)
-	content = append(content, "")
-
-	// Limit items shown based on available height
-	availableHeight := m.height - 6 // Account for borders, padding, header, and footer
-	visibleItems := listItems
-	if len(listItems) > availableHeight {
-		visibleItems = listItems[:availableHeight]
-	}
-	content = append(content, visibleItems...)
-
-	content = append(content, "")
-	content = append(content, help)
-
-	return m.applyBorder(content)
+	// Layout everything
+	return m.layoutListView(listItems, help)
 }
 
 // renderDetailView renders the detail view of selected log
