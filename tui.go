@@ -42,6 +42,15 @@ type Model struct {
 	renderer           *UIRenderer
 	width              int
 	height             int
+	// Filter and sort state
+	sortBy             string // "started_at", "ended_at", "last_modified"
+	sortDescending     bool   // true = newest first, false = oldest first
+	filterText         string // Search in title and body
+	filterTag          string // Filter by specific tag
+	filterTextInput    textinput.Model
+	filterTagInput     textinput.Model
+	filterInputMode    string // "", "text", "tag" - which filter input is active
+	pendingKeySequence string // Track multi-character key sequences like "cf", "ct"
 }
 
 // NewModel creates a new TUI model
@@ -64,6 +73,15 @@ func NewModel(entries map[string]core.Entry, saveEntryFn SaveEntryFunc, deleteEn
 	// Initialize body textarea
 	bodyTextarea := textarea.New()
 	bodyTextarea.Placeholder = "enter body..."
+
+	// Initialize filter inputs
+	filterTextInput := textinput.New()
+	filterTextInput.Placeholder = "search text..."
+	filterTextInput.CharLimit = 100
+
+	filterTagInput := textinput.New()
+	filterTagInput.Placeholder = "tag name..."
+	filterTagInput.CharLimit = 50
 
 	// Build initial ordering from entries sorted by StartedAtTimestamp (most recent first)
 	orderedIDs := make([]string, 0, len(entries))
@@ -119,6 +137,14 @@ func NewModel(entries map[string]core.Entry, saveEntryFn SaveEntryFunc, deleteEn
 		renderer:           NewUIRenderer(NewMinimalUI()),
 		width:              width,
 		height:             height,
+		sortBy:             "started_at",
+		sortDescending:     true, // Newest first by default
+		filterText:         "",
+		filterTag:          "",
+		filterTextInput:    filterTextInput,
+		filterTagInput:     filterTagInput,
+		filterInputMode:    "",
+		pendingKeySequence: "",
 	}
 }
 
@@ -130,6 +156,78 @@ func (m Model) Init() tea.Cmd {
 // Update handles messages
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
+
+	// Handle filter input mode
+	if m.filterInputMode != "" {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			// Handle tag suggestions navigation when in tag filter mode
+			if m.filterInputMode == "tag" && m.showTagSuggestions && len(m.tagSuggestions) > 0 {
+				switch msg.String() {
+				case "down":
+					if m.selectedSuggest < len(m.tagSuggestions)-1 {
+						m.selectedSuggest++
+					}
+					return m, nil
+				case "up":
+					if m.selectedSuggest > 0 {
+						m.selectedSuggest--
+					}
+					return m, nil
+				case "enter":
+					// Apply selected tag suggestion as filter
+					selectedTag := m.tagSuggestions[m.selectedSuggest]
+					m.filterTag = selectedTag
+					m.filterInputMode = ""
+					m.filterTagInput.Blur()
+					m.showTagSuggestions = false
+					m.tagSuggestions = []string{}
+					m.selectedIndex = 0
+					return m, nil
+				}
+			}
+
+			switch msg.String() {
+			case "enter":
+				// Apply filter (if no suggestions showing)
+				if m.filterInputMode == "text" {
+					m.filterText = m.filterTextInput.Value()
+				} else if m.filterInputMode == "tag" {
+					m.filterTag = m.filterTagInput.Value()
+				}
+				m.filterInputMode = ""
+				m.filterTextInput.Blur()
+				m.filterTagInput.Blur()
+				m.showTagSuggestions = false
+				m.tagSuggestions = []string{}
+				m.selectedIndex = 0 // Reset selection
+				return m, nil
+			case "esc":
+				// Cancel filter input
+				m.filterInputMode = ""
+				m.filterTextInput.Blur()
+				m.filterTagInput.Blur()
+				m.showTagSuggestions = false
+				m.tagSuggestions = []string{}
+				return m, nil
+			}
+		}
+
+		// Update the active filter input
+		if m.filterInputMode == "text" {
+			m.filterTextInput, cmd = m.filterTextInput.Update(msg)
+		} else if m.filterInputMode == "tag" {
+			oldVal := m.filterTagInput.Value()
+			m.filterTagInput, cmd = m.filterTagInput.Update(msg)
+			newVal := m.filterTagInput.Value()
+
+			// Update suggestions if value changed
+			if oldVal != newVal {
+				m.updateFilterTagSuggestions()
+			}
+		}
+		return m, cmd
+	}
 
 	// When in edit mode, handle input updates
 	if m.view == "edit" {
@@ -290,21 +388,96 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleKey processes keyboard input
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
+	key := msg.String()
+
+	// Handle pending key sequences (like "cf", "ct", "cc")
+	if m.pendingKeySequence != "" {
+		if m.pendingKeySequence == "c" && m.view == "list" {
+			switch key {
+			case "f": // cf - clear text filter
+				m.filterText = ""
+				m.selectedIndex = 0
+				m.pendingKeySequence = ""
+				return m, nil
+			case "t": // ct - clear tag filter
+				m.filterTag = ""
+				m.selectedIndex = 0
+				m.pendingKeySequence = ""
+				return m, nil
+			case "c": // cc - clear all filters
+				m.filterText = ""
+				m.filterTag = ""
+				m.selectedIndex = 0
+				m.pendingKeySequence = ""
+				return m, nil
+			}
+		}
+		// Invalid second key, clear pending
+		m.pendingKeySequence = ""
+	}
+
+	switch key {
 	case "q", "ctrl+c":
 		return m, tea.Quit
+	case "s": // Cycle sort field
+		if m.view == "list" {
+			switch m.sortBy {
+			case "started_at":
+				m.sortBy = "ended_at"
+			case "ended_at":
+				m.sortBy = "last_modified"
+			case "last_modified":
+				m.sortBy = "started_at"
+			}
+			m.selectedIndex = 0 // Reset selection when sorting changes
+		}
+	case "r": // Reverse sort direction
+		if m.view == "list" {
+			m.sortDescending = !m.sortDescending
+			m.selectedIndex = 0
+		}
+	case "c": // Start clear filter sequence (c + f/t) or clear all
+		if m.view == "list" {
+			// Set pending to wait for second character
+			m.pendingKeySequence = "c"
+			// But also support single "c" to clear all after a brief moment
+			// For now, just set pending and user can press c twice or cf/ct
+		}
+	case "f": // Enter text filter input mode
+		if m.view == "list" && m.pendingKeySequence == "" {
+			m.filterInputMode = "text"
+			m.filterTextInput.SetValue(m.filterText)
+			m.filterTextInput.Focus()
+		}
+	case "t": // Enter tag filter input mode
+		if m.view == "list" && m.pendingKeySequence == "" {
+			m.filterInputMode = "tag"
+			m.filterTagInput.SetValue(m.filterTag)
+			m.filterTagInput.Focus()
+			m.updateFilterTagSuggestions() // Show tag suggestions
+		}
 	case "up", "k":
-		if m.view == "list" && m.selectedIndex > 0 {
-			m.selectedIndex--
+		if m.view == "list" {
+			displayIDs := m.getFilteredAndSortedIDs()
+			if m.selectedIndex > 0 && len(displayIDs) > 0 {
+				m.selectedIndex--
+			}
 		}
 	case "down", "j":
-		if m.view == "list" && m.selectedIndex < len(m.orderedIDs)-1 {
-			m.selectedIndex++
+		if m.view == "list" {
+			displayIDs := m.getFilteredAndSortedIDs()
+			if m.selectedIndex < len(displayIDs)-1 {
+				m.selectedIndex++
+			}
 		}
 	case "enter", " ":
 		if m.view == "list" && len(m.entries) > 0 {
 			// Load current entry into all inputs
-			selectedID := m.orderedIDs[m.selectedIndex]
+			displayIDs := m.getFilteredAndSortedIDs()
+			if len(displayIDs) == 0 {
+				return m, nil
+			}
+			selectedID := displayIDs[m.selectedIndex]
 			entry := m.entries[selectedID]
 
 			// Load title
@@ -336,17 +509,33 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.view = "edit"
 		}
 	case "d": // delete log
-		if m.view == "list" && len(m.orderedIDs) > 0 {
-			selectedID := m.orderedIDs[m.selectedIndex]
+		if m.view == "list" {
+			displayIDs := m.getFilteredAndSortedIDs()
+			if len(displayIDs) == 0 {
+				return m, nil
+			}
+
+			selectedID := displayIDs[m.selectedIndex]
+
+			// Delete from entries map
 			delete(m.entries, selectedID)
+
 			// Remove from orderedIDs
-			m.orderedIDs = append(m.orderedIDs[:m.selectedIndex], m.orderedIDs[m.selectedIndex+1:]...)
+			for i, id := range m.orderedIDs {
+				if id == selectedID {
+					m.orderedIDs = append(m.orderedIDs[:i], m.orderedIDs[i+1:]...)
+					break
+				}
+			}
+
 			// Delete from storage
 			if err := m.deleteEntryFn(selectedID); err != nil {
 				logger.Error("entry_delete_failed", "error", err.Error())
 			}
+
 			// Adjust selectedIndex if needed
-			if m.selectedIndex >= len(m.orderedIDs) && m.selectedIndex > 0 {
+			newDisplayIDs := m.getFilteredAndSortedIDs()
+			if m.selectedIndex >= len(newDisplayIDs) && m.selectedIndex > 0 {
 				m.selectedIndex--
 			}
 		}
@@ -425,8 +614,156 @@ func (m Model) applyBorder(content []string) string {
 		Render(innerContent)
 }
 
+// getFilteredAndSortedIDs returns entry IDs filtered and sorted according to current settings
+func (m Model) getFilteredAndSortedIDs() []string {
+	// Start with all IDs
+	ids := make([]string, 0, len(m.entries))
+	for id := range m.entries {
+		ids = append(ids, id)
+	}
+
+	// Apply filters
+	var filteredIDs []string
+	for _, id := range ids {
+		entry := m.entries[id]
+
+		// Filter by text (search in title and body)
+		if m.filterText != "" {
+			searchText := strings.ToLower(m.filterText)
+			title := strings.ToLower(entry.Title)
+			body := strings.ToLower(entry.Body)
+			if !strings.Contains(title, searchText) && !strings.Contains(body, searchText) {
+				continue // Skip this entry
+			}
+		}
+
+		// Filter by tag
+		if m.filterTag != "" {
+			hasTag := false
+			for _, tag := range entry.Tags {
+				if tag == m.filterTag {
+					hasTag = true
+					break
+				}
+			}
+			if !hasTag {
+				continue // Skip this entry
+			}
+		}
+
+		filteredIDs = append(filteredIDs, id)
+	}
+
+	// Sort filtered IDs with stable secondary sort by ID
+	sort.Slice(filteredIDs, func(i, j int) bool {
+		entryI := m.entries[filteredIDs[i]]
+		entryJ := m.entries[filteredIDs[j]]
+		idI := filteredIDs[i]
+		idJ := filteredIDs[j]
+
+		var timeI, timeJ time.Time
+		switch m.sortBy {
+		case "started_at":
+			timeI = entryI.StartedAtTimestamp
+			timeJ = entryJ.StartedAtTimestamp
+		case "ended_at":
+			timeI = entryI.EndedAtTimestamp
+			timeJ = entryJ.EndedAtTimestamp
+		case "last_modified":
+			timeI = entryI.LastModifiedTimestamp
+			timeJ = entryJ.LastModifiedTimestamp
+		default:
+			timeI = entryI.StartedAtTimestamp
+			timeJ = entryJ.StartedAtTimestamp
+		}
+
+		// Handle zero timestamps - put entries without timestamps at the end
+		if timeI.IsZero() && !timeJ.IsZero() {
+			return false
+		}
+		if !timeI.IsZero() && timeJ.IsZero() {
+			return true
+		}
+
+		// If both zero or both non-zero, compare timestamps
+		if !timeI.Equal(timeJ) {
+			if m.sortDescending {
+				return timeI.After(timeJ)
+			}
+			return timeI.Before(timeJ)
+		}
+
+		// Timestamps are equal - use ID as stable secondary sort
+		// IDs are timestamps, so numeric comparison
+		if m.sortDescending {
+			return idI > idJ
+		}
+		return idI < idJ
+	})
+
+	return filteredIDs
+}
+
+// renderFilterSortSection renders the filter and sort controls
+func (m Model) renderFilterSortSection() []string {
+	labelStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("6")).
+		Bold(true)
+
+	valueStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("7"))
+
+	dimStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("8"))
+
+	var lines []string
+
+	// Sort line
+	sortDirection := "↓ newest"
+	if !m.sortDescending {
+		sortDirection = "↑ oldest"
+	}
+	sortFieldDisplay := map[string]string{
+		"started_at":      "Started",
+		"ended_at":        "Ended",
+		"last_modified":   "Modified",
+	}[m.sortBy]
+
+	sortLine := labelStyle.Render("Sort: ") +
+		valueStyle.Render(sortFieldDisplay+" "+sortDirection) +
+		dimStyle.Render("  [s: field, r: reverse]")
+	lines = append(lines, sortLine)
+
+	// Filter line
+	filterParts := []string{}
+	if m.filterText != "" {
+		filterParts = append(filterParts, "text:"+m.filterText)
+	}
+	if m.filterTag != "" {
+		filterParts = append(filterParts, "tag:"+m.filterTag)
+	}
+
+	var filterLine string
+	if m.pendingKeySequence == "c" {
+		// Show pending command hint
+		filterLine = labelStyle.Render("Filter: ") +
+			lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Bold(true).Render("c") +
+			dimStyle.Render(" + [f: clear text, t: clear tag, c: clear all]")
+	} else if len(filterParts) > 0 {
+		filterLine = labelStyle.Render("Filter: ") +
+			valueStyle.Render(strings.Join(filterParts, ", ")) +
+			dimStyle.Render("  [f: text, t: tag, cf: clear text, ct: clear tag, cc: clear all]")
+	} else {
+		filterLine = labelStyle.Render("Filter: ") +
+			dimStyle.Render("none  [f: text, t: tag]")
+	}
+	lines = append(lines, filterLine)
+
+	return lines
+}
+
 // layoutListView arranges all visual elements vertically:
-// top border, list content, spacer, navigation instructions, bottom border
+// top border, filter/sort section, list content, spacer, navigation instructions, bottom border
 func (m Model) layoutListView(listItems []string, helpText string) string {
 	borderStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#32a852"))
@@ -444,9 +781,13 @@ func (m Model) layoutListView(listItems []string, helpText string) string {
 	// Build bottom border
 	bottomBorder := strings.Repeat("/", m.width)
 
+	// Get filter/sort section
+	filterSortLines := m.renderFilterSortSection()
+	filterSortCount := len(filterSortLines)
+
 	// Calculate available space for list items
-	// Layout: top border (1) + items + spacer + empty line (1) + help (1) + bottom border (1)
-	reservedLines := 4 // top, empty before help, help, bottom
+	// Layout: top border (1) + filter/sort (2) + empty (1) + items + spacer + empty (1) + help (1) + bottom (1)
+	reservedLines := 4 + filterSortCount + 1 // top, filter/sort, empty after filter, empty before help, help, bottom
 	availableForItems := m.height - reservedLines
 	if availableForItems < 0 {
 		availableForItems = 0
@@ -459,7 +800,7 @@ func (m Model) layoutListView(listItems []string, helpText string) string {
 	}
 
 	// Calculate spacer to push help and bottom border down
-	usedLines := 1 + len(visibleItems) + 1 + 1 + 1 // top + items + empty + help + bottom
+	usedLines := 1 + filterSortCount + 1 + len(visibleItems) + 1 + 1 + 1 // top + filter/sort + empty + items + empty + help + bottom
 	spacerLines := m.height - usedLines
 	if spacerLines < 0 {
 		spacerLines = 0
@@ -468,16 +809,64 @@ func (m Model) layoutListView(listItems []string, helpText string) string {
 	// Build final layout
 	var result []string
 	result = append(result, borderStyle.Render(topBorder))
-	result = append(result, visibleItems...)
+	result = append(result, filterSortLines...)
 
-	// Add spacer
-	for i := 0; i < spacerLines; i++ {
+	// Show filter input prompt if in filter input mode
+	if m.filterInputMode != "" {
+		promptStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("11")).
+			Bold(true)
+
+		var promptText string
+		var inputView string
+		if m.filterInputMode == "text" {
+			promptText = "Filter by text: "
+			inputView = m.filterTextInput.View()
+		} else if m.filterInputMode == "tag" {
+			promptText = "Filter by tag: "
+			inputView = m.filterTagInput.View()
+		}
+
 		result = append(result, "")
+		result = append(result, promptStyle.Render(promptText)+inputView)
+
+		// Show tag suggestions if in tag filter mode
+		if m.filterInputMode == "tag" && m.showTagSuggestions && len(m.tagSuggestions) > 0 {
+			suggestionStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("7")).
+				Background(lipgloss.Color("8"))
+
+			selectedStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("0")).
+				Background(lipgloss.Color("6"))
+
+			for i, suggestion := range m.tagSuggestions {
+				if i >= 5 { // Limit to 5 suggestions
+					break
+				}
+				if i == m.selectedSuggest {
+					result = append(result, selectedStyle.Render("  > "+suggestion))
+				} else {
+					result = append(result, suggestionStyle.Render("    "+suggestion))
+				}
+			}
+		}
+
+		result = append(result, lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("enter: apply | esc: cancel"))
+	} else {
+		result = append(result, "") // Empty line after filter/sort
+		result = append(result, visibleItems...)
+
+		// Add spacer
+		for i := 0; i < spacerLines; i++ {
+			result = append(result, "")
+		}
+
+		// Add help text (2 lines above bottom: empty line + help line)
+		result = append(result, "")
+		result = append(result, helpText)
 	}
 
-	// Add help text (2 lines above bottom: empty line + help line)
-	result = append(result, "")
-	result = append(result, helpText)
 	result = append(result, borderStyle.Render(bottomBorder))
 
 	return strings.Join(result, "\n")
@@ -485,17 +874,29 @@ func (m Model) layoutListView(listItems []string, helpText string) string {
 
 // renderListView renders the list of logs
 func (m Model) renderListView() string {
+	// Get filtered and sorted IDs
+	displayIDs := m.getFilteredAndSortedIDs()
+
 	// Build list items
 	var listItems []string
-	if len(m.orderedIDs) == 0 {
+	if len(displayIDs) == 0 {
 		// Show empty state message
-		emptyMsg := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("8")).
-			Italic(true).
-			Render("No logs yet. Press 'n' to create your first log entry.")
-		listItems = append(listItems, emptyMsg)
+		if len(m.entries) == 0 {
+			emptyMsg := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("8")).
+				Italic(true).
+				Render("No logs yet. Press 'n' to create your first log entry.")
+			listItems = append(listItems, emptyMsg)
+		} else {
+			// Has entries but all filtered out
+			emptyMsg := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("8")).
+				Italic(true).
+				Render("No entries match current filters. Press 'c' to clear filters.")
+			listItems = append(listItems, emptyMsg)
+		}
 	} else {
-		for i, id := range m.orderedIDs {
+		for i, id := range displayIDs {
 			log := m.entries[id]
 			selected := i == m.selectedIndex
 
@@ -730,6 +1131,31 @@ func (m *Model) collectAllTags() []string {
 		tags = append(tags, tag)
 	}
 	return tags
+}
+
+// updateFilterTagSuggestions updates tag suggestions for filter input
+func (m *Model) updateFilterTagSuggestions() {
+	input := strings.TrimSpace(m.filterTagInput.Value())
+
+	// Filter available tags based on current input
+	suggestions := []string{}
+
+	if input == "" {
+		// Show all available tags when input is empty
+		suggestions = append(suggestions, m.availableTags...)
+	} else {
+		// Filter tags based on what's being typed
+		inputLower := strings.ToLower(input)
+		for _, tag := range m.availableTags {
+			if strings.HasPrefix(strings.ToLower(tag), inputLower) {
+				suggestions = append(suggestions, tag)
+			}
+		}
+	}
+
+	m.tagSuggestions = suggestions
+	m.showTagSuggestions = len(suggestions) > 0
+	m.selectedSuggest = 0
 }
 
 // updateTagSuggestions updates the tag suggestions based on current input
